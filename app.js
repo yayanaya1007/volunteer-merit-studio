@@ -198,8 +198,7 @@ async function importPairedWorkbooks() {
       return;
     }
     draftText({announceResult:false});
-    const aiUsed = await generateAIDraft({announceResult:false});
-    announce(`실적 기준 ${summary.rows.length}건 중 시간인증 ${detailed.rows.length}건을 대조해 승인된 일치 실적 ${records.length}건을 반영했습니다. 초안 ${aiUsed?'AI 작성':'자동 작성'}이 끝났습니다. 증빙자료와 대조해 확인해 주세요.`);
+    announce(`실적 기준 ${summary.rows.length}건 중 시간인증 ${detailed.rows.length}건을 AI 없이 대조해 승인된 일치 실적 ${records.length}건을 반영했습니다. 기본 초안을 자동으로 채웠습니다. AI 문장 작성을 원할 때만 아래 버튼을 누르세요.`);
   } catch (error) {
     announce(error.message || '엑셀 파일을 읽지 못했습니다. 파일 형식을 확인해 주세요.','error');
   }
@@ -341,9 +340,10 @@ async function generateAIDraft({announceResult=true}={}) {
   }
 }
 $('draft').addEventListener('click',async()=>{
-  if (!draftText({announceResult:false})) { announce('먼저 두 엑셀을 선택하거나 실적을 직접 입력해 주세요.','error'); return; }
+  if (!selected().length) { announce('먼저 두 엑셀을 선택하거나 실적을 직접 입력해 주세요.','error'); return; }
   const aiUsed=await generateAIDraft({announceResult:false});
-  announce(aiUsed?'AI가 초안을 만들었습니다. 사실과 다른 문구는 원자료에 맞게 고쳐 주세요.':'AI 서버가 연결되지 않아 기본 초안을 만들었습니다. AI 사용은 앱을 로컬 서버로 열어야 가능합니다.');
+  if (!aiUsed) draftText({announceResult:false});
+  announce(aiUsed?'AI가 근거 실적만 바탕으로 문장을 작성했습니다. 사실과 다른 내용이 없는지 원자료와 대조해 주세요.':'AI 서버를 사용할 수 없습니다. 엑셀 읽기와 기본 초안은 계속 AI 없이 사용할 수 있습니다.');
 });
 $('gist').addEventListener('input',updateCharacterCount);
 function updateCharacterCount() {
