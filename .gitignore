@@ -7,7 +7,6 @@ node_modules/
 *_작업.json
 reference/
 template-data.js
-template-native*.hwpx
 /server.mjs
 create-native-template.ps1
 /package.json

@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const fieldIds = ['year','event','name','hanja','birth','gender','org','job','rank','position','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','career','history','gist','intro','character','reputation','matching'];
+const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','education','career','history','gist','intro','character','reputation','matching'];
 const defaultCategories = ['지역안전 및 화재예방','재난·재해 대응 및 방역','환경보호 및 자원순환','문화행사 지원','이웃사랑 실천'];
 let records = [];
 let groups = defaultCategories.map(title => ({title,detail:'',short:''}));
@@ -281,11 +281,11 @@ $('rows').addEventListener('change',event=>{
   else if (key==='cat') records[index].cat=Number(event.target.value);
   else if (key==='hours') records[index].hours=hoursValue(event.target.value);
   else if (key==='desc') { records[index].desc=clean(event.target.value); records[index].cat=classify(records[index]); }
-  renderRows(); renderReferences();
+  renderRows(); renderReferences(); draftText({announceResult:false});
 });
 $('rows').addEventListener('click',event=>{
   const button=event.target.closest('[data-delete]'); if (!button) return;
-  records.splice(Number(button.dataset.delete),1); renderRows(); renderReferences();
+  records.splice(Number(button.dataset.delete),1); renderRows(); renderReferences(); draftText({announceResult:false});
 });
 $('addRow').addEventListener('click',()=>{
   records.push({area:'',desc:'직접 입력 실적',date:'',hours:0,approved:true,included:true,cat:0,source:'직접 입력',hasDate:false,importKind:'manual'});
@@ -345,7 +345,13 @@ function draftText({announceResult=true}={}) {
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
   $('gist').value=`${active.slice(0,3).join('·')||'자원봉사'} 분야에서 꾸준히 활동하여 지역사회 발전에 기여함.`.slice(0,50);
-  $('intro').value=`상기인은 ${active.join(', ')} 분야의 자원봉사활동에 참여하여 지역사회 발전과 자원봉사 활성화에 기여함.`;
+  const {start,end}=periodRange();
+  const period=start&&end?`${start.replaceAll('-','.')}부터 ${end.replaceAll('-','.')}까지`:'확인된 공적 기간 동안';
+  const hours=included.some(record=>record.hours>0)?` 총 ${included.reduce((sum,record)=>sum+Number(record.hours||0),0).toFixed(1)}시간`:' 봉사시간 확인 필요';
+  $('intro').value=`상기인은 ${period} 승인 봉사실적 ${included.length}건${hours}에 참여하고, ${active.join(', ')} 분야에서 지역사회 발전과 자원봉사 활성화에 기여함.`;
+  $('character').value='제공된 실적에서 자원봉사 참여가 확인됨. 도덕성 흠결 여부는 현지조사 확인 필요.';
+  $('reputation').value='지역 주민 여론과 공·사생활은 제공된 실적으로 확인할 수 없어 현지조사 확인 필요.';
+  $('matching').value='승인 실적을 기준으로 초안을 작성함. 원본 실적과 증빙자료 대조 후 최종 확인 필요.';
   updateCharacterCount();
   if (announceResult) announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동 횟수와 문구를 원자료·증빙과 대조해 수정하세요.');
   return true;
@@ -370,9 +376,10 @@ async function generateAIDraft({announceResult=true}={}) {
     try { resultBody=JSON.parse(rawBody); } catch { resultBody={error:rawBody}; }
     if (!response.ok) throw new Error(resultBody.error||'AI 초안을 만들지 못했습니다.');
     const result=resultBody;
-    if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
+    if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string'||typeof result.character!=='string'||typeof result.reputation!=='string'||typeof result.matching!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
     groups=groups.map((group,index)=>({...group,detail:clean(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
+    $('character').value=clean(result.character);$('reputation').value=clean(result.reputation);$('matching').value=clean(result.matching);
     renderGroups(); updateCharacterCount();
     if (announceResult) announce('AI가 승인된 시간인증 실적만 바탕으로 초안을 만들었습니다. 문구와 실적을 증빙자료와 대조해 주세요.');
     return true;
@@ -421,23 +428,28 @@ function documentModel() {
   const active=groups.map((group,index)=>({...group,index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
-    year:val('year'),event:val('event'),name:val('name')||'추천 대상자',hanja:val('hanja'),birth:val('birth'),gender:val('gender'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg')||val('org'),investigatorRank:val('investigatorRank'),recommender:val('recommender')||val('org'),docDate:date,career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:val('matching'),period:periodText(),groups:active
+    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:val('matching'),period:periodText(),groups:active
   };
 }
-function previewPages() {
-  const d=documentModel();
-  const infoRows=[['성명',d.name,'한자',d.hanja],['생년월일',d.birth,'성별',d.gender],['주소',d.address,'소속',d.org],['직급·직책',d.rank,'추천 훈격',d.award],['공적기간',d.period,'추천 순위',d.order]];
-  const table=rows=>`<table>${rows.map(row=>`<tr>${row.map((value,index)=>`<td class="${index%2===0?'doc-label':''}">${esc(value)}</td>`).join('')}</tr>`).join('')}</table>`;
-  const page1=`<h3>공 적 조 서</h3><p class="center">${esc(d.year)}년 ${esc(d.event)}</p>${table(infoRows)}<div class="doc-section"><strong>공적요지 (50자 내외)</strong><div class="doc-block">${esc(d.gist||'입력 필요')}</div></div><p class="doc-foot">위 기록이 틀림없음을 확인합니다.<br>${esc(d.docDate)}<br><br>추천관 ${esc(d.recommender)} ${stampMarkup('recommender')}</p>`;
-  const page2=`<h3>주요 학력 및 경력</h3>${table([['경력',d.career||'확인된 경력만 입력'],['과거 표창기록',d.history||'확인된 기록만 입력']])}<h3>공 적 사 항</h3><p class="doc-block">${esc(d.intro||'입력 필요')}</p>${d.groups.slice(0,3).map(g=>`<div class="doc-section"><strong>○ ${esc(g.title)}</strong><div class="doc-block">${esc(g.detail||'내용 확인 필요')}</div></div>`).join('')}`;
-  const page3=`<h3>공 적 사 항 (계속)</h3>${d.groups.slice(3).map(g=>`<div class="doc-section"><strong>○ ${esc(g.title)}</strong><div class="doc-block">${esc(g.detail||'내용 확인 필요')}</div></div>`).join('')}`;
-  const page4=`<h3>공 적 개 요 서</h3>${table([['소속',d.org,'직급',d.rank],['성명',d.name,'공적기간',d.period]])}<div class="doc-section"><strong>공적 개요</strong>${d.groups.map(g=>`<div class="doc-section"><strong>○ ${esc(g.title)}</strong><div class="doc-block">${esc(g.short||'해당 실적 없음 · 내용 확인 필요')}</div></div>`).join('')}</div>`;
-  const page5=`<h3>현 지 조 사 확 인 서</h3><h4>1. 인적사항</h4>${table([['소속',d.org,'직위(직급)',d.rank],['성명',d.name,'생년월일(성별)',`${d.birth} (${d.gender})`]])}<h4>2. 현지조사 확인내용</h4><div class="doc-section"><strong>품성 (도덕성 흠결 여부 등)</strong><div class="doc-block">${esc(d.character||'현지조사 후 확인 필요')}</div></div><div class="doc-section"><strong>지역여론 (공·사생활 등)</strong><div class="doc-block">${esc(d.reputation||'현지조사 후 확인 필요')}</div></div><div class="doc-section"><strong>공적사항 (공적내용과 일치 여부)</strong><div class="doc-block">${esc(d.matching||'검증 후 작성')}</div></div><p class="doc-foot">${esc(d.docDate)}<br><br>현지조사자<br>소속: ${esc(d.investigatorOrg)}<br>직위: ${esc(d.investigatorRank)}　성명: ${esc(d.investigator)} ${stampMarkup('investigator')}</p>`;
-  return [page1,page2,page3,page4,page5];
-}
-$('previewBtn').addEventListener('click',()=>{
-  $('documentPreview').innerHTML=previewPages().map((html,index)=>`<article class="doc-page" aria-label="${index+1}쪽">${html}</article>`).join('');
-  $('documentPreview').hidden=false; $('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+let previewObjectUrl='';
+$('previewBtn').addEventListener('click',async()=>{
+  const status=$('exportStatus'),button=$('previewBtn');
+  if(!['localhost','127.0.0.1'].includes(location.hostname)){
+    status.textContent='원본 한글 서식과 글꼴 그대로 미리보려면 한컴오피스 한글이 설치된 PC의 로컬 앱에서 미리보기를 열어 주세요. 저장한 HWPX도 한글에서 원본 서식으로 열립니다.';
+    status.classList.add('notice-caution');return;
+  }
+  button.disabled=true;button.textContent='한글 서식으로 렌더링 중…';
+  try{
+    const response=await fetch('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:documentModel()})});
+    if(!response.ok)throw new Error(await response.text()||`미리보기 생성 오류 (${response.status})`);
+    const blob=await response.blob();
+    if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl=URL.createObjectURL(blob);
+    $('documentPreview').innerHTML=`<iframe title="원본 한글 서식 미리보기" src="${previewObjectUrl}"></iframe>`;
+    $('documentPreview').hidden=false;$('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+    status.textContent='원본 한글 문서를 PDF로 렌더링한 미리보기입니다. 표·글꼴·간격은 저장 문서와 같은 한글 서식을 사용합니다.';status.classList.remove('notice-caution');
+  }catch(error){status.textContent=`한글 원본 서식 미리보기를 만들지 못했습니다. ${error.message}`;status.classList.add('notice-caution');}
+  finally{button.disabled=false;button.textContent='문서 미리보기';}
 });
 
 // HWPX is an OWPML ZIP package. All text and stamp bytes are assembled in
@@ -464,6 +476,81 @@ function withStamp(text, kind, id) {
   const size=Number($(kind==='recommender'?'recommenderStampSize':'investigatorStampSize').value);
   const marker=`<hp:t xml:space="preserve">${xmlText(text)} (인) </hp:t>${hwpxImage(id,size)}`;
   return hwpxParagraph(marker,{id});
+}
+function cleanTemplateValue(value) { return String(value??'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim(); }
+function changeParagraphRange(nodes, start, end, replacement) {
+  let offset=0, first=null, last=null, firstOffset=0, lastOffset=0;
+  for (const node of nodes) {
+    const text=node.textContent||'', next=offset+text.length;
+    if (!first&&start<next) { first=node; firstOffset=offset; }
+    if (end<=next) { last=node; lastOffset=offset; break; }
+    offset=next;
+  }
+  if (!first||!last) return false;
+  const firstText=first.textContent||'', lastText=last.textContent||'';
+  if (first===last) first.textContent=firstText.slice(0,start-firstOffset)+replacement+firstText.slice(end-firstOffset);
+  else {
+    first.textContent=firstText.slice(0,start-firstOffset)+replacement;
+    for (const node of nodes.slice(nodes.indexOf(first)+1,nodes.indexOf(last))) node.textContent='';
+    last.textContent=lastText.slice(end-lastOffset);
+  }
+  return true;
+}
+function replaceTemplateText(doc, search, replacement, exactOnly=false) {
+  for (const paragraph of doc.getElementsByTagNameNS(HWP_NS.hp,'p')) {
+    const nodes=Array.from(paragraph.getElementsByTagNameNS(HWP_NS.hp,'t'));
+    const joined=nodes.map(node=>node.textContent||'').join('');
+    if(exactOnly){if(joined===search)changeParagraphRange(nodes,0,joined.length,cleanTemplateValue(replacement));continue;}
+    const index=joined.indexOf(search);
+    if (index>=0) changeParagraphRange(nodes,index,index+search.length,cleanTemplateValue(replacement));
+  }
+}
+async function createTemplateHwpx(model) {
+  const response=await fetch(new URL('template-native.hwpx',document.baseURI));
+  if(!response.ok)throw new Error(`한글 원본 서식을 불러오지 못했습니다 (${response.status}).`);
+  const zip=await JSZip.loadAsync(await response.arrayBuffer());
+  const entry=zip.file('Contents/section0.xml');
+  if(!entry)throw new Error('원본 서식에서 문서 내용을 찾지 못했습니다.');
+  const xml=await entry.async('string');
+  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  if(doc.querySelector('parsererror'))throw new Error('원본 한글 서식을 읽지 못했습니다.');
+  const values={
+    '{{name}}':model.name,'{{hanja}}':model.hanja,'{{birth}}':model.birth,'{{address}}':model.address,'{{phone}}':model.phone,
+    '{{serviceNo}}':model.serviceNo,'{{nationality}}':model.nationality,'{{meritField}}':model.meritField,'{{award}}':model.award,'{{order}}':model.order,
+    '{{org}}':model.org,'{{rank}}':model.rank,'{{position}}':model.position,'{{gist}}':model.gist||model.intro,'{{period}}':model.period,
+    '{{education}}':model.education,'{{career}}':model.career,'{{history}}':model.history,
+    '{{investigatorRank}}':model.investigatorRank,'{{investigator}}':model.investigator,'{{docDateKor}}':model.docDate,
+    '{{recommender}}':model.recommender,'{{gender}}':model.gender,'{{character}}':model.character,'{{reputation}}':model.reputation,'{{matching}}':model.matching,
+    '{{overview}}':model.groups.map(group=>`○ ${group.title}  - ${group.short||'해당 분야 실적 없음'}`).join('   ')
+  };
+  model.groups.forEach((group,index)=>{
+    values[`{{g${index}title}}`]=group.title;
+    values[`{{g${index}detail}}`]=group.detail;
+    values[`{{g${index}short}}`]=group.short;
+  });
+  const documentDate=new Date(`${model.docDate}T00:00:00`);
+  values['{{docDateKor}}']=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
+  const fallbackAge=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;return String(Math.max(0,new Date(model.docDate).getFullYear()-year));})();
+  const staticReplacements=[
+    ['지역 문화관광축제 운영 지원을 위한 자원봉사활동에 참여하여 방문객 안내',model.groups[3]?.detail],
+    ['특히 육군훈련소 입영문화제, 육군병장문화예술제, 연무읍 승격 60주년 음악회',''],
+    ['등 각종 지역행사에 참여하여 원활한 행사 운영에 기여함.',''],
+    ['설맞이 어르신 떡국, 사랑의 빵 나눔, 어버이날 카네이션 달아드리기 등',model.groups[4]?.detail],
+    ['{{g4title}} 활동에 참여하여 지역사회 발전에 기여함.',''],
+    ['마을담당제 안전점검, 소방시설 점검',model.groups[0]?.short],['취약가구 순찰 및 화재예방 활동',''],
+    ['집중호우 피해 농가 복구와 코로나19',model.groups[1]?.short],['방역·소독 활동',''],
+    ['환경정화 및 투명페트병 분리배출 활동을',model.groups[2]?.short],['통해 쾌적한 환경 조성',''],
+    ['각종 지역행사에 방문객 편의 지원 및',model.groups[3]?.short],['행사장 안전관리 활동',''],
+    ['어르신 나눔 활동, 카네이션 전달 및',model.groups[4]?.short],['취약가구 생활안전 지원',''],
+    ['투철한 모범적인 시민임.',''],['신뢰와 존경을 받고 있으며',''],['평가받고 있음.',''],['55세',fallbackAge?`${fallbackAge}세`:'']
+  ];
+  for(const [search,value] of staticReplacements)replaceTemplateText(doc,search,cleanTemplateValue(value));
+  for(const [token,value] of Object.entries(values))replaceTemplateText(doc,token,cleanTemplateValue(value));
+  zip.file('Contents/section0.xml',new XMLSerializer().serializeToString(doc));
+  const preview=zip.file('Preview/PrvText.txt');
+  if(preview){let text=await preview.async('string');for(const [token,value] of Object.entries(values))text=text.split(token).join(cleanTemplateValue(value));for(const [search,value] of staticReplacements)text=text.split(search).join(cleanTemplateValue(value));zip.file('Preview/PrvText.txt',text);}
+  const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
+  return new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
 }
 function pageSection(lines, startId, pageBreak=false) {
   return lines.map((line,index)=>{
@@ -540,24 +627,11 @@ async function exportHwpx() {
       }
     }
     if (!blob) {
-      const xml=createHwpxXml(model);
-      const zip=new JSZip();
-      zip.file('mimetype','application/hwp+zip',{compression:'STORE',createFolders:false});
-      zip.file('version.xml',xml.version,{createFolders:false});
-      zip.file('META-INF/container.xml',xml.container,{createFolders:false});
-      zip.file('META-INF/manifest.xml',xml.manifest,{createFolders:false});
-      zip.file('Contents/content.hpf',xml.packageXml,{createFolders:false});
-      zip.file('Contents/header.xml',xml.headerXml,{createFolders:false});
-      zip.file('Contents/section0.xml',xml.sectionXml,{createFolders:false});
-      zip.file('Contents/settings.xml',xml.settings,{createFolders:false});
-      const image=stampBytes();
-      if (image) zip.file(`BinData/${stamp.type==='image/jpeg'?'stamp.jpg':'stamp.png'}`,image,{createFolders:false});
-      const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
-      blob=new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
+      blob=await createTemplateHwpx(model);
     }
     const filename=`${safeFilename(model.year)}_공적조서_${safeFilename(model.name)}.hwpx`;
     const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
-    announceExport(usedNativeTemplate?`${filename}을 한글 양식으로 저장했습니다. 도장, 빈 항목, 쪽 나눔을 확인해 주세요.`:`${filename}을 이 기기의 브라우저에서 만들었습니다. 한글에서 양식, 도장, 쪽 나눔을 확인해 주세요.`);
+    announceExport(usedNativeTemplate?`${filename}을 제공된 한글 원본 서식으로 저장했습니다. 도장과 입력 내용을 확인해 주세요.`:`${filename}을 제공된 한글 원본 서식으로 저장했습니다. 한글에서 입력 내용을 확인해 주세요.`);
   } catch (error) {
     console.error(error); announceExport(`HWPX를 만들지 못했습니다: ${error.message||error}`,'error');
   } finally { button.disabled=false;button.textContent='한글 문서 (.hwpx) 저장'; }
