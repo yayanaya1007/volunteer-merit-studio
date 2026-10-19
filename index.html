@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#16324c">
+  <meta name="description" content="봉사실적을 브라우저에서 분류하고 공적조서 HWPX 초안을 만드는 도구">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23173852'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Arial' font-size='38' font-weight='700' fill='%23cde8df'%3EV%3C/text%3E%3C/svg%3E">
+  <title>Volunteer Merit Studio · 자원봉사 공적조서</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor/jszip.min.js"></script>
+  <script defer src="vendor/xlsx.full.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">V</span><div><strong>Volunteer Merit Studio</strong><span>자원봉사 공적조서 작성실</span></div></div>
+    <div class="topbar-meta"><span class="local-badge"><i></i> 파일은 이 기기에서 처리됩니다</span><button id="saveProject" class="button button-quiet">작업 저장</button></div>
+  </header>
+
+  <main class="layout">
+    <section class="intro-row">
+      <div><div class="eyebrow">연도별로 다시 쓰는 공적조서</div><h1>실적을 정리하고, 문서 초안을 만드세요</h1><p>엑셀을 넣으면 실적을 읽어 다섯 분야로 나눕니다. 확인하고 고친 내용은 한글에서 편집할 수 있는 HWPX로 저장할 수 있습니다.</p></div>
+      <div class="steps" aria-label="작성 순서"><span class="step active">1 <b>기본 정보</b></span><span class="step-line"></span><span class="step">2 <b>실적 확인</b></span><span class="step-line"></span><span class="step">3 <b>한글 저장</b></span></div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">01</span><div><h2>행사와 추천 대상자</h2><p>확인된 개인정보와 공적 기간을 입력하세요.</p></div></div>
+      <div class="form-grid">
+        <label>행사연도<input id="year" type="number" value="2026" min="2000" max="2100"></label>
+        <label>행사명<input id="event" value="자원봉사자 기념식"></label>
+        <label>성명<input id="name" placeholder="추천 대상자"></label>
+        <label>한자 성명<input id="hanja" placeholder="해당하는 경우"></label>
+        <label>생년월일<input id="birth" placeholder="1971.05.09"></label>
+        <label>성별<select id="gender"><option value="">선택</option><option>여</option><option>남</option></select></label>
+        <label>소속<input id="org" placeholder="봉사단체"></label>
+        <label>직업<input id="job"></label>
+        <label>직급<input id="rank" placeholder="예: 총무부장"></label>
+        <label>직위<input id="position" placeholder="예: 대원"></label>
+        <label class="span-2">주소<input id="address" autocomplete="street-address"></label>
+        <label>연락처<input id="phone" autocomplete="tel"></label>
+        <label>추천 훈격<input id="award"></label>
+        <label>추천 순위<input id="order"></label>
+        <label>조사자 성명<input id="investigator"></label>
+        <label>조사자 소속<input id="investigatorOrg"></label>
+        <label>조사자 직위<input id="investigatorRank" placeholder="예: 대장"></label>
+        <label>추천관<input id="recommender"></label>
+        <label>문서 작성일<input id="docDate" type="date"></label>
+        <label class="span-2">주요 경력<textarea id="career" rows="2" placeholder="확인된 경력만 입력"></textarea></label>
+        <label class="span-2">과거 표창기록<textarea id="history" rows="2" placeholder="확인된 표창기록만 입력"></textarea></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">02</span><div><h2>봉사실적 가져오기</h2><p>1365 원본 엑셀, 분야별 정리 엑셀, CSV를 함께 올릴 수 있습니다.</p></div></div>
+      <div class="upload-row"><label class="file-picker">실적 파일 선택<input id="upload" type="file" accept=".xlsx,.xls,.csv" multiple></label><button id="addRow" class="button button-light">실적 직접 추가</button><button id="clearRows" class="button button-text">전체 비우기</button></div>
+      <div id="fileStatus" class="notice" role="status">파일은 브라우저 안에서만 읽습니다. 업로드한 내용은 서버로 전송되지 않습니다.</div>
+      <div class="stats">
+        <div><span>포함 실적</span><b id="count">0건</b></div><div><span>봉사시간 합계</span><b id="hours">—</b></div><div><span>최초 활동일</span><b id="start">—</b></div><div><span>마지막 활동일</span><b id="end">—</b></div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>포함</th><th>일자</th><th>활동분야</th><th>봉사내용</th><th>시간</th><th>분류</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty-row">엑셀 또는 CSV 파일을 선택해 주세요.</td></tr></tbody></table></div>
+      <div class="upload-row upload-row-bottom"><button id="exportCSV" class="button button-light">분류 실적 CSV 저장</button><span id="importSummary" class="hint"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">03</span><div><h2>다섯 분야 공적 초안</h2><p>분야별 활동을 묶어 초안을 만들고 실제 증빙과 비교해 수정하세요. 다섯 분야는 문서에 모두 표시됩니다.</p></div></div>
+      <div id="groups" class="groups-grid"></div>
+      <div class="action-row"><button id="draft" class="button button-primary">실적을 바탕으로 초안 만들기</button><button id="regroup" class="button button-light">분류 다시 제안</button></div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">04</span><div><h2>공적조서와 현지조사</h2><p>공적요지는 50자 안팎으로 작성합니다. 현지조사 내용은 실제 확인 후 확정하세요.</p></div></div>
+      <div class="form-grid">
+        <label class="span-2">공적요지 <span id="characters" class="counter">0 / 50자</span><textarea id="gist" rows="2" maxlength="100" placeholder="실제 봉사 실적을 토대로 요약"></textarea></label>
+        <label class="span-2">공적사항 시작 문장<textarea id="intro" rows="2" placeholder="상기인은 … 기여함."></textarea></label>
+        <label class="span-2">품성 (도덕성 흠결 여부 등) <span class="field-note">현지조사 후 확인</span><textarea id="character" rows="2" placeholder="조사 결과를 한 줄로 기록"></textarea></label>
+        <label class="span-2">지역여론 (공·사생활 등) <span class="field-note">현지조사 후 확인</span><textarea id="reputation" rows="2" placeholder="조사 결과를 한 줄로 기록"></textarea></label>
+        <label class="span-2">공적내용 일치 여부<input id="matching" placeholder="예: 공적내용과 일치함 (확인 후 입력)"></label>
+      </div>
+      <div class="notice notice-caution">품성·지역여론·공적 일치 여부는 앱이 판단하지 않습니다. 담당자가 현지조사와 증빙자료를 확인한 뒤 입력해 주세요.</div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">05</span><div><h2>도장과 한글 문서</h2><p>선택한 도장은 미리보기에서 위치와 크기를 확인한 뒤, 저장한 한글 문서에 직접 삽입합니다.</p></div></div>
+      <div class="stamp-controls">
+        <label class="file-picker">도장 이미지 선택 (PNG/JPG)<input id="stampFile" type="file" accept="image/png,image/jpeg"></label>
+        <label>추천관 도장 크기 <span id="recommenderStampValue">22 mm</span><input id="recommenderStampSize" type="range" min="12" max="40" value="22"></label>
+        <label>조사자 도장 크기 <span id="investigatorStampValue">22 mm</span><input id="investigatorStampSize" type="range" min="12" max="40" value="22"></label>
+        <button id="removeStamp" class="button button-text">도장 지우기</button>
+      </div>
+      <div id="stampPreview" class="stamp-preview" hidden><img id="stampImage" alt="선택한 도장"><span id="stampName"></span><span class="hint">도장은 미리보기용입니다. 저장된 한글 파일에는 별도로 삽입해야 합니다.</span></div>
+      <div class="preview-actions"><button id="previewBtn" class="button button-light">문서 미리보기</button><button id="downloadHwpx" class="button button-primary">한글 문서 (.hwpx) 저장</button><label class="button button-light import-project">작업 불러오기<input id="jsonFile" type="file" accept=".json"></label></div>
+      <div id="exportStatus" class="notice" role="status">HWPX 초안을 브라우저에서 만듭니다. 저장 후 한글에서 양식과 쪽 나눔, 도장 위치를 확인하세요.</div>
+      <div class="document-preview" id="documentPreview" hidden></div>
+    </section>
+
+  <footer>Volunteer Merit Studio <span>·</span> 실적과 입력 내용은 브라우저에서 처리하고 결과 파일은 이 기기에 저장합니다.</footer>
+  </main>
+</body>
+</html>
