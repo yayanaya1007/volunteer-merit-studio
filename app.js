@@ -4,6 +4,8 @@ const defaultCategories = ['지역안전 및 화재예방','재난·재해 대�
 let records = [];
 let groups = defaultCategories.map(title => ({title,detail:'',short:''}));
 let stamp = null;
+let performanceFile = null;
+let timeAuthFile = null;
 let lastImport = {files:0, imported:0, duplicates:0, rejected:0};
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -21,6 +23,7 @@ function announce(message, tone='info') {
 function announceExport(message, tone='info') {
   const target = $('exportStatus'); target.textContent = message; target.className = `notice ${tone === 'error' ? 'notice-caution' : ''}`;
 }
+$('chooseRecords').addEventListener('click',()=> $('timeAuthUpload').click());
 
 function normalizeDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
@@ -171,27 +174,47 @@ function mergeRecords(incoming) {
   return {added,enriched,duplicates};
 }
 
-$('upload').addEventListener('change', async event => {
-  const files = [...event.target.files];
-  if (!files.length) return;
-  let imported=0,enriched=0,duplicates=0,rejected=0,errors=[];
-  for (const file of files) {
-    try {
-      const result = await parseWorkbook(file);
-      rejected += result.rejected;
-      const merged = mergeRecords(result.rows);
-      imported += merged.added; enriched += merged.enriched; duplicates += merged.duplicates;
-      if (!result.rows.length) errors.push(result.hasDescriptionColumn
-        ? `${file.name}: 봉사내용 열은 있지만 가져올 실적 행이 없습니다.`
-        : `${file.name}: 봉사내용 열이 없습니다. 활동분야·봉사내용이 있는 실적 엑셀을 선택해 주세요.`);
-    } catch (error) { errors.push(`${file.name}: ${error.message}`); }
+async function importPairedWorkbooks() {
+  if (!performanceFile || !timeAuthFile) {
+    announce('실적 엑셀과 시간인증 엑셀을 모두 선택해 주세요. 두 파일을 비교한 뒤 일치하는 승인 실적만 가져옵니다.');
+    return;
   }
-  lastImport = {files:files.length,imported,enriched,duplicates,rejected};
-  $('importSummary').textContent = `${files.length}개 파일 · 현재 ${records.length}건 · ${enriched}건 날짜·시간 보강 · ${duplicates}건 중복 제외`;
-  renderRows(); renderReferences();
-  if (errors.length) announce(errors.join(' / '), 'error');
-  else announce(`${imported}건을 추가하고 요약 실적 ${enriched}건에 날짜·시간을 반영했습니다. 동일한 날짜·내용의 중복 실적 ${duplicates}건은 제외했습니다. 분야를 확인하고 초안을 작성하세요.`);
-  event.target.value='';
+  announce('두 엑셀을 읽고 활동 내용과 승인 상태를 대조하고 있습니다…');
+  try {
+    const [summary, detailed] = await Promise.all([parseWorkbook(performanceFile),parseWorkbook(timeAuthFile)]);
+    if (!summary.rows.length || !detailed.rows.length) {
+      throw new Error('두 파일 모두 활동분야와 봉사내용 열이 있는지 확인해 주세요.');
+    }
+    const allowed = new Set(summary.rows.map(record => recordKey(record,false)));
+    const matched = detailed.rows.filter(record => record.approved && allowed.has(recordKey(record,false)));
+    const filteredOut = detailed.rows.length - matched.length;
+    records = [];
+    const merged = mergeRecords(matched);
+    lastImport = {files:2,imported:merged.added,enriched:merged.enriched,duplicates:merged.duplicates,rejected:summary.rejected+detailed.rejected};
+    $('importSummary').textContent = `실적 기준 ${summary.rows.length}건 · 시간인증 ${detailed.rows.length}건 · 일치 승인 ${records.length}건 · 제외 ${filteredOut}건`;
+    renderRows(); renderReferences();
+    if (!selected().length) {
+      announce('두 파일에서 일치하는 승인 실적을 찾지 못했습니다. 활동분야·봉사내용을 확인해 주세요.','error');
+      return;
+    }
+    draftText({announceResult:false});
+    const aiUsed = await generateAIDraft({announceResult:false});
+    announce(`실적 기준 ${summary.rows.length}건 중 시간인증 ${detailed.rows.length}건을 대조해 승인된 일치 실적 ${records.length}건을 반영했습니다. 초안 ${aiUsed?'AI 작성':'자동 작성'}이 끝났습니다. 증빙자료와 대조해 확인해 주세요.`);
+  } catch (error) {
+    announce(error.message || '엑셀 파일을 읽지 못했습니다. 파일 형식을 확인해 주세요.','error');
+  }
+}
+$('performanceUpload').addEventListener('change',event=>{
+  performanceFile=event.target.files?.[0]||null;
+  $('performanceFileName').textContent=performanceFile?.name||'선택 안 됨';
+  if (performanceFile && timeAuthFile) importPairedWorkbooks();
+  else if (performanceFile) announce('실적 엑셀을 선택했습니다. 이제 시간인증 엑셀도 선택해 주세요.');
+});
+$('timeAuthUpload').addEventListener('change',event=>{
+  timeAuthFile=event.target.files?.[0]||null;
+  $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
+  if (performanceFile && timeAuthFile) importPairedWorkbooks();
+  else if (timeAuthFile) announce('시간인증 엑셀을 선택했습니다. 이제 실적 엑셀도 선택해 주세요.');
 });
 
 function selected() { return records.filter(record => record.included); }
@@ -242,9 +265,12 @@ $('addRow').addEventListener('click',()=>{
   const input=$('rows').querySelector('tr:last-child input[type=text]'); input?.focus();
 });
 $('clearRows').addEventListener('click',()=>{
-  if (!records.length) return;
+  if (!records.length && !performanceFile && !timeAuthFile) return;
   if (!confirm('가져오거나 직접 입력한 실적을 모두 지울까요?')) return;
-  records=[]; renderRows(); renderReferences(); $('importSummary').textContent=''; announce('실적 목록을 비웠습니다.');
+  records=[]; performanceFile=null; timeAuthFile=null;
+  $('performanceUpload').value=''; $('timeAuthUpload').value='';
+  $('performanceFileName').textContent='선택 안 됨'; $('timeAuthFileName').textContent='선택 안 됨';
+  renderRows(); renderReferences(); $('importSummary').textContent=''; announce('실적 목록과 선택한 엑셀을 비웠습니다.');
 });
 
 function renderGroups() {
@@ -275,9 +301,9 @@ $('regroup').addEventListener('click',()=>{
   announce('활동내용의 단어를 바탕으로 분야를 다시 제안했습니다. 분야별 실적을 꼭 확인하세요.');
 });
 
-function draftText() {
+function draftText({announceResult=true}={}) {
   const included=selected();
-  if (!included.length) { announce('먼저 봉사실적을 가져오거나 직접 입력해 주세요.','error'); return; }
+  if (!included.length) { if (announceResult) announce('먼저 봉사실적을 가져오거나 직접 입력해 주세요.','error'); return false; }
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     const descriptions=[...new Set(rows.map(record=>clean(record.desc)).filter(Boolean))];
@@ -293,9 +319,32 @@ function draftText() {
   $('gist').value=`${active.slice(0,3).join('·')||'자원봉사'} 분야에서 꾸준히 활동하여 지역사회 발전에 기여함.`.slice(0,50);
   $('intro').value=`상기인은 ${active.join(', ')} 분야의 자원봉사활동에 참여하여 지역사회 발전과 자원봉사 활성화에 기여함.`;
   updateCharacterCount();
-  announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동 횟수와 문구를 원자료·증빙과 대조해 수정하세요.');
+  if (announceResult) announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동 횟수와 문구를 원자료·증빙과 대조해 수정하세요.');
+  return true;
 }
-$('draft').addEventListener('click',draftText);
+async function generateAIDraft({announceResult=true}={}) {
+  if (!selected().length) return false;
+  if (!['127.0.0.1','localhost'].includes(location.hostname)) return false;
+  try {
+    const response=await fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categories:groups.map(group=>group.title),records:selected().map(record=>({area:record.area,desc:record.desc,date:record.date,hours:record.hours,category:groups[record.cat]?.title||groups[0].title}))})});
+    if (!response.ok) throw new Error(await response.text()||'AI 초안을 만들지 못했습니다.');
+    const result=await response.json();
+    if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
+    groups=groups.map((group,index)=>({...group,detail:clean(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
+    $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
+    renderGroups(); updateCharacterCount();
+    if (announceResult) announce('AI가 승인된 시간인증 실적만 바탕으로 초안을 만들었습니다. 문구와 실적을 증빙자료와 대조해 주세요.');
+    return true;
+  } catch (error) {
+    if (announceResult) announce(`AI 연결을 사용할 수 없어 기본 초안을 유지했습니다. ${error.message}`,'error');
+    return false;
+  }
+}
+$('draft').addEventListener('click',async()=>{
+  if (!draftText({announceResult:false})) { announce('먼저 두 엑셀을 선택하거나 실적을 직접 입력해 주세요.','error'); return; }
+  const aiUsed=await generateAIDraft({announceResult:false});
+  announce(aiUsed?'AI가 초안을 만들었습니다. 사실과 다른 문구는 원자료에 맞게 고쳐 주세요.':'AI 서버가 연결되지 않아 기본 초안을 만들었습니다. AI 사용은 앱을 로컬 서버로 열어야 가능합니다.');
+});
 $('gist').addEventListener('input',updateCharacterCount);
 function updateCharacterCount() {
   const count=val('gist').length,element=$('characters');
