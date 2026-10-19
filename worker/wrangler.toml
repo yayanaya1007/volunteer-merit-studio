@@ -1,0 +1,8 @@
+name = "volunteer-merit-studio-ai"
+main = "src/index.js"
+compatibility_date = "2026-10-19"
+workers_dev = true
+account_id = "c5841a907ed305d1448d2251593a8891"
+
+[vars]
+APP_ORIGIN = "https://yayanaya1007.github.io"

@@ -1,0 +1,12 @@
+{
+  "name": "volunteer-merit-studio-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@napi-rs/keyring": "1.3.0",
+    "wrangler": "4.151.1"
+  }
+}

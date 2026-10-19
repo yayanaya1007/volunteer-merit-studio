@@ -23,6 +23,35 @@ function announce(message, tone='info') {
 function announceExport(message, tone='info') {
   const target = $('exportStatus'); target.textContent = message; target.className = `notice ${tone === 'error' ? 'notice-caution' : ''}`;
 }
+const isLocalAI = ['127.0.0.1','localhost'].includes(location.hostname);
+const publicAIUrl = String(window.MERIT_API_URL || '').replace(/\/$/, '');
+if (isLocalAI) {
+  $('aiAccessCode').closest('.ai-access-row').hidden = true;
+  $('aiConnectionStatus').textContent = '이 PC의 로컬 AI 서버를 사용합니다.';
+} else if (!publicAIUrl) {
+  $('aiConnectionStatus').textContent = '공개 AI 서버가 아직 연결되지 않았습니다.';
+}
+if (sessionStorage.getItem('merit-ai-access-code')) {
+  $('aiConnectionStatus').textContent = '이 기기에서 연결됨';
+}
+$('connectAI').addEventListener('click', async () => {
+  if (!publicAIUrl) { $('aiConnectionStatus').textContent = '서버 배포가 끝나면 연결할 수 있습니다.'; return; }
+  const code = clean($('aiAccessCode').value);
+  if (!code) { $('aiConnectionStatus').textContent = '접근 코드를 입력해 주세요.'; return; }
+  $('connectAI').disabled = true;
+  $('aiConnectionStatus').textContent = '코드를 확인하고 있습니다…';
+  try {
+    const response = await fetch(`${publicAIUrl}/api/authorize`, { method:'POST', headers:{'Authorization':`Bearer ${code}`} });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '접근 코드를 확인하지 못했습니다.');
+    sessionStorage.setItem('merit-ai-access-code', code);
+    $('aiAccessCode').value = '';
+    $('aiConnectionStatus').textContent = '이 기기에서 연결됨';
+  } catch (error) {
+    sessionStorage.removeItem('merit-ai-access-code');
+    $('aiConnectionStatus').textContent = error.message || '서버에 연결하지 못했습니다.';
+  } finally { $('connectAI').disabled = false; }
+});
 $('chooseRecords').addEventListener('click',()=> $('timeAuthUpload').click());
 
 function normalizeDate(value) {
@@ -323,11 +352,24 @@ function draftText({announceResult=true}={}) {
 }
 async function generateAIDraft({announceResult=true}={}) {
   if (!selected().length) return false;
-  if (!['127.0.0.1','localhost'].includes(location.hostname)) return false;
+  const local = ['127.0.0.1','localhost'].includes(location.hostname);
+  if (!local && !publicAIUrl) {
+    if (announceResult) announce('공개 AI 서버가 아직 연결되지 않았습니다. 기본 초안은 계속 AI 없이 사용할 수 있습니다.','error');
+    return false;
+  }
+  const accessCode = local ? '' : sessionStorage.getItem('merit-ai-access-code');
+  if (!local && !accessCode) {
+    if (announceResult) announce('먼저 AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error');
+    $('aiAccessCode').focus();
+    return false;
+  }
   try {
-    const response=await fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categories:groups.map(group=>group.title),records:selected().map(record=>({area:record.area,desc:record.desc,date:record.date,hours:record.hours,category:groups[record.cat]?.title||groups[0].title}))})});
-    if (!response.ok) throw new Error(await response.text()||'AI 초안을 만들지 못했습니다.');
-    const result=await response.json();
+    const response=await fetch(`${local?'':publicAIUrl}/api/draft`,{method:'POST',headers:{'Content-Type':'application/json',...(accessCode?{'Authorization':`Bearer ${accessCode}`}:{})},body:JSON.stringify({categories:groups.map(group=>group.title),records:selected().map(record=>({area:record.area,desc:record.desc,date:record.date,hours:record.hours,category:groups[record.cat]?.title||groups[0].title}))})});
+    const rawBody=await response.text();
+    let resultBody;
+    try { resultBody=JSON.parse(rawBody); } catch { resultBody={error:rawBody}; }
+    if (!response.ok) throw new Error(resultBody.error||'AI 초안을 만들지 못했습니다.');
+    const result=resultBody;
     if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
     groups=groups.map((group,index)=>({...group,detail:clean(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
@@ -341,9 +383,11 @@ async function generateAIDraft({announceResult=true}={}) {
 }
 $('draft').addEventListener('click',async()=>{
   if (!selected().length) { announce('먼저 두 엑셀을 선택하거나 실적을 직접 입력해 주세요.','error'); return; }
+  if (!isLocalAI && !publicAIUrl) { announce('공개 AI 서버 연결이 아직 준비 중입니다. 기본 초안은 AI 없이 사용할 수 있습니다.','error'); return; }
+  if (!isLocalAI && !sessionStorage.getItem('merit-ai-access-code')) { announce('AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error'); $('aiAccessCode').focus(); return; }
   const aiUsed=await generateAIDraft({announceResult:false});
   if (!aiUsed) draftText({announceResult:false});
-  announce(aiUsed?'AI가 근거 실적만 바탕으로 문장을 작성했습니다. 사실과 다른 내용이 없는지 원자료와 대조해 주세요.':'AI 서버를 사용할 수 없습니다. 엑셀 읽기와 기본 초안은 계속 AI 없이 사용할 수 있습니다.');
+  announce(aiUsed?'AI가 근거 실적만 바탕으로 문장을 작성했습니다. 사실과 다른 내용이 없는지 원자료와 대조해 주세요.':'AI 서버를 사용할 수 없습니다. 엑셀 읽기와 기본 초안은 계속 AI 없이 사용할 수 있습니다.','error');
 });
 $('gist').addEventListener('input',updateCharacterCount);
 function updateCharacterCount() {
