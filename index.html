@@ -11,7 +11,7 @@
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="api-config.js"></script>
-  <script defer src="app.js?v=20261020-namefix-3"></script>
+  <script defer src="app.js?v=20261020-talkfile-fix"></script>
 </head>
 <body>
   <header class="topbar">
@@ -112,8 +112,8 @@
   fileInput.addEventListener('change',function(){
     const file=this.files&&this.files[0];
     if(!file)return;
-    const filename=file.name.replace(/\.(xlsx|xls|csv)$/i,'').trim();
-    const match=filename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
+    const filename=file.name.normalize('NFC').replace(/\.(xlsx|xls|csv)$/i,'').replace(/^(?:TalkFile[_\-\s]+)+/i,'').trim();
+    const match=filename.match(/(?:^|[_\-\s])([가-힣]{2,5})\s*\(\s*\d{4,}\s*\)/)||filename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
     if(match){
       nameInput.value=match[1];
       nameInput.dispatchEvent(new Event('input',{bubbles:true}));
