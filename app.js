@@ -273,6 +273,10 @@ async function importSingleWorkbook() {
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
+  if(timeAuthFile && !val('name')) {
+    const matched=timeAuthFile.name.match(/^([가-힣]{2,5})\s*(?:\(\d+\)|[_\-\s])/);
+    if(matched) $('name').value=matched[1]; // 1365 파일명에 이름이 있을 때만 채움
+  }
   if(timeAuthFile) importSingleWorkbook();
 });
 
