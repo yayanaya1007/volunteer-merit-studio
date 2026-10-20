@@ -11,7 +11,7 @@
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="api-config.js"></script>
-  <script defer src="app.js?v=20261020-excel-actions-visible"></script>
+  <script defer src="app.js?v=20261020-no-investigation-phrases"></script>
 </head>
 <body>
   <header class="topbar">
@@ -69,7 +69,7 @@
 
     <section class="card">
       <div class="section-heading"><span class="section-number">03</span><div><h2>실적에 따라 자동 생성된 분야별 공적내용 (최대 4개)</h2><p>엑셀을 올리면 주요 공적사항과 공적개요서 문장이 자동으로 채워집니다. 내용을 확인하고 필요한 부분만 수정하세요.</p></div></div>
-      <div class="notice">AI 문장 다듬기는 선택사항입니다. AI를 사용하면 활동 분야·내용·일자·시간만 전송하며 이름·주소·연락처는 전송하지 않습니다. 품성·지역여론은 봉사실적만으로 확인할 수 없어 현지조사 필요로 표시합니다.</div>
+      <div class="notice">AI 문장 다듬기는 선택사항입니다. AI를 사용하면 활동 분야·내용·일자·시간만 전송하며 이름·주소·연락처는 전송하지 않습니다. 품성·지역여론은 실제 확인한 사실에 따라 작성해 주세요.</div>
       <div class="ai-access-row"><label>AI 접근 코드<input id="aiAccessCode" type="password" autocomplete="current-password" placeholder="서버에서 받은 코드를 입력"></label><button id="connectAI" class="button button-light" type="button">이 기기에서 연결</button><span id="aiConnectionStatus" class="hint" role="status">공개 AI 서버 연결을 준비 중입니다.</span></div>
       <div id="groups" class="groups-grid"></div>
       <div class="action-row"><button id="draft" class="button button-primary">AI로 문장 다듬기 (선택)</button><button id="regroup" class="button button-light">분류 다시 제안</button></div>
