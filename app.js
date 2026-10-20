@@ -403,6 +403,36 @@ function meritPhrases(rows) {
   }
   return items;
 }
+// 실적 문장의 공통 핵심어를 기준으로 비슷한 활동을 묶고 중복된 표현을 줄인다.
+function compactActivity(raw){
+  return clean(raw).replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'')
+    .replace(/\([^)]*\)/g,' ').replace(/\[[^\]]*\]/g,' ')
+    .replace(/\b\d{1,2}:\d{2}\b/g,' ')
+    .replace(/(?:자원봉사활동|자원봉사|봉사활동|봉사자|활동지원|봉사지원)/g,' ')
+    .replace(/(?:참여|실시|진행|지원함|실시함|진행함|참여함|보조함)[.。]?$/,'')
+    .replace(/\s+/g,' ').replace(/^[·,\s]+|[·,\s.。]+$/g,'').slice(0,65);
+}
+function activityTokens(value){
+  const ignore=new Set(['봉사','활동','지원','지역','사회','진행','참여','운영','관리','관련','기타','대한','위한','행사','주민','대상','프로그램']);
+  return compactActivity(value).split(/[^가-힣A-Za-z0-9]+/).filter(word=>word.length>=2&&!ignore.has(word));
+}
+function summarizedActivities(rows,maxItems=3){
+  const clusters=[];
+  for(const row of rows){
+    const label=compactActivity(row.desc||row.area);
+    if(!label)continue;
+    const tokens=activityTokens(label);
+    let target=clusters.find(cluster=>{
+      const shared=tokens.filter(token=>cluster.tokens.includes(token));
+      return (shared.length>=2)||(shared.length>=1&&tokens.length<=2&&cluster.tokens.length<=2);
+    });
+    if(!target){target={label,tokens,count:0,examples:[]};clusters.push(target);}
+    target.count++;target.examples.push(label);
+    if(label.length<target.label.length&&label.length>=4)target.label=label;
+  }
+  clusters.sort((a,b)=>b.count-a.count);
+  return clusters.slice(0,maxItems).map(cluster=>cluster.label);
+}
 function contributionFor(rows,title){
   const text=rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
   if(/환경|정화|재활용|분리배출|탄소|자원순환/.test(text))return '쾌적한 생활환경 조성과 환경보호 인식 확산';
@@ -423,12 +453,10 @@ function draftText({announceResult=true}={}) {
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     if(!rows.length){group.detail='';group.short='';return;}
-    const phrases=meritPhrases(rows);
+    const summary=summarizedActivities(rows,3);
     const contribution=contributionFor(rows,group.title);
-    const examples=phrases.slice(0,4);
-    group.detail=examples.map(phrase=>`• ${phrase} 활동에 참여함.`).join('\n');
-    if(phrases.length>4)group.detail+=`\n• 그 밖에 ${rows.length}건의 관련 봉사활동에 참여함.`;
-    group.short=`${phrases.slice(0,2).join(' 및 ')||group.title} 활동을 통해 ${contribution}에 기여함.`;
+    group.detail=summary.map(phrase=>`• ${phrase} 활동을 통해 ${contribution}에 기여함.`).join('\n');
+    group.short=`${summary.slice(0,2).join(' 및 ')||group.title} 활동을 통해 ${contribution}에 기여함.`;
   });
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
