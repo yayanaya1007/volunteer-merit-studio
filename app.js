@@ -382,14 +382,39 @@ $('regroup').addEventListener('click',()=>{
 
 const FIXED_MATCHING = '공적내용은 제출된 봉사실적을 근거로 작성하였으며, 원본 및 증빙자료와 최종 대조하여 일치 여부를 확인함.';
 function fieldInvestigationDraft(rows) {
-  const count=rows.length;
   const dates=rows.map(row=>row.date).filter(Boolean).sort();
-  const years=new Set(dates.map(date=>date.slice(0,4)));
-  const activities=[...new Set(rows.map(row=>clean(row.desc)).filter(Boolean))];
-  const duration=years.size>1?`${years.size}개 연도에 걸쳐`:'';
-  const character=`봉사실적상 ${duration} ${count}건의 자원봉사에 참여한 사실이 확인되며, 꾸준한 참여 태도를 보여줌. 도덕성 흠결 여부는 현지조사 확인 필요.`.replace(/\s+/g,' ').trim();
-  const reputation=`지역사회에서 ${activities.slice(0,2).join('·')||'자원봉사'} 등 ${count}건의 활동에 참여한 기록이 확인됨. 지역여론 및 공·사생활 평가는 현지조사 확인 필요.`;
-  return {character,reputation};
+  const count=rows.length;
+  const period=dates.length>1 && dates[0].slice(0,4)!==dates.at(-1).slice(0,4)?'오랜 기간 ': '';
+  return {
+    character:`평소 ${period}자원봉사활동에 꾸준히 참여하며 성실한 봉사 자세를 보여줌. 도덕성 관련 특이사항은 현지조사 확인 필요.`,
+    reputation:`지역사회에서 ${count}건의 봉사활동에 참여하며 나눔을 실천한 실적이 확인됨. 주민 신망 및 공·사생활 평가는 현지조사 확인 필요.`
+  };
+}
+// 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
+function meritPhrases(rows) {
+  const seen=new Set(),items=[];
+  for(const row of rows){
+    const raw=clean(row.desc).replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'').replace(/\s+/g,' ');
+    if(!raw)continue;
+    const phrase=raw.replace(/[.。]+$/,'').slice(0,90);
+    const key=normalized(phrase);
+    if(!key||seen.has(key))continue;
+    seen.add(key);items.push(phrase);
+  }
+  return items;
+}
+function contributionFor(rows,title){
+  const text=rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
+  if(/환경|정화|재활용|분리배출|탄소|자원순환/.test(text))return '쾌적한 생활환경 조성과 환경보호 인식 확산';
+  if(/재난|수해|복구|방역|소방|화재|안전/.test(text))return '지역사회 안전과 재난 대응';
+  if(/문화|축제|행사|공연|예술/.test(text))return '지역문화 활성화와 원활한 행사 운영';
+  if(/급식|나눔|어르신|돌봄|취약|건강|의료/.test(text))return '이웃사랑 실천과 주민 복지 증진';
+  if(/교육|학습|멘토/.test(text))return '교육 지원과 지역사회 발전';
+  return '지역사회 발전과 자원봉사 활성화';
+}
+function readableHours(value){
+  const minutes=Math.round(value*60);
+  return `${Math.floor(minutes/60)}시간${minutes%60?` ${minutes%60}분`:''}`;
 }
 function draftText({announceResult=true}={}) {
   const included=selected();
@@ -397,22 +422,21 @@ function draftText({announceResult=true}={}) {
   if (!groups.length) autoGroupRecords();
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
-    const descriptions=[...new Set(rows.map(record=>clean(record.desc)).filter(Boolean))];
-    if (!rows.length) {
-      group.detail=''; group.short=''; return;
-    }
-    const examples=descriptions.slice(0,5).join(', ');
-    const sum=rows.reduce((total,row)=>total+Number(row.hours||0),0);
-    group.detail=`${group.title}과 관련하여 ${examples||'기록된 봉사활동'}${descriptions.length>5?' 등':''}에 참여함. 해당 분야의 확인된 활동은 ${rows.length}건, ${sum.toFixed(1)}시간임.`;
-    group.short=`${descriptions.slice(0,2).join('·')}${descriptions.length>2?' 등':''} (${rows.length}건)`;
+    if(!rows.length){group.detail='';group.short='';return;}
+    const phrases=meritPhrases(rows);
+    const contribution=contributionFor(rows,group.title);
+    const examples=phrases.slice(0,4);
+    group.detail=examples.map(phrase=>`• ${phrase} 활동에 참여함.`).join('\n');
+    if(phrases.length>4)group.detail+=`\n• 그 밖에 ${rows.length}건의 관련 봉사활동에 참여함.`;
+    group.short=`${phrases.slice(0,2).join(' 및 ')||group.title} 활동을 통해 ${contribution}에 기여함.`;
   });
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
-  $('gist').value=`${active.slice(0,2).join('·')||'자원봉사'} 활동으로 지역사회에 기여함.`.slice(0,50);
+  $('gist').value=`${active.slice(0,2).join('·')||'자원봉사'} 활동으로 지역사회 발전과 나눔문화 확산에 기여함.`.slice(0,50);
   const {start,end}=periodRange();
-  const period=start&&end?`${start.replaceAll('-','.')}부터 ${end.replaceAll('-','.')}까지`:'확인된 공적 기간 동안';
-  const hours=included.some(record=>record.hours>0)?` 총 ${included.reduce((sum,record)=>sum+Number(record.hours||0),0).toFixed(1)}시간`:' 봉사시간 확인 필요';
-  $('intro').value=`상기인은 ${period} 승인 봉사실적 ${included.length}건${hours}에 참여하고, ${active.join(', ')} 분야에서 지역사회 발전과 자원봉사 활성화에 기여함.`;
+  const period=start&&end?`${start.slice(0,4)}년부터 ${end.slice(0,4)}년까지`:'확인된 공적기간 동안';
+  const totalHours=included.reduce((sum,record)=>sum+Number(record.hours||0),0);
+  $('intro').value=`상기인은 ${period} 지역사회를 위한 자원봉사활동 ${included.length}회, 총 ${readableHours(totalHours)}에 꾸준히 참여한 자로, ${active.join(', ')} 활동을 실천하여 지역사회 발전과 자원봉사 활성화에 기여한 공적이 큼.`;
   const investigation=fieldInvestigationDraft(included);
   $('character').value=investigation.character;
   $('reputation').value=investigation.reputation;
