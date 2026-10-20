@@ -1,10 +1,9 @@
 const $ = (id) => document.getElementById(id);
 const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','education','career','history','gist','intro','character','reputation','matching'];
-const defaultCategories = ['지역안전 및 화재예방','재난·재해 대응 및 방역','환경보호 및 자원순환','문화행사 지원','이웃사랑 실천'];
+const MAX_GROUPS = 4;
 let records = [];
-let groups = defaultCategories.map(title => ({title,detail:'',short:''}));
+let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
-let performanceFile = null;
 let timeAuthFile = null;
 let lastImport = {files:0, imported:0, duplicates:0, rejected:0};
 
@@ -81,19 +80,64 @@ function hoursValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+// 내부 분석 단서는 여러 활동 유형을 포괄하지만, 화면에 고정된 4개 분야는 없다.
+// 제목은 각 봉사자의 엑셀에 실제로 기재된 '활동분야'와 '봉사내용'에서 도출한다.
+const themeCues = [
+  {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환']},
+  {key:'arts',words:['공연','위안공연','연주','합창','음악회','예술','문화','축제','전시','무대']},
+  {key:'disaster',words:['재난','재해','수해','복구','침수','폭우','산불','제설','방역','소독','감염병']},
+  {key:'care',words:['어르신','노인','장애','돌봄','말벗','요양','취약','아동','청소년','독거']},
+  {key:'meal',words:['급식','배식','반찬','도시락','식사','떡국','빵나눔','김장','무료급식']},
+  {key:'safety',words:['안전','소방','화재','순찰','교통','예방','응급','구조','구급']},
+  {key:'education',words:['교육','학습','멘토','지도','강의','교실','독서','도서관']},
+  {key:'donation',words:['기부','나눔','후원','물품','전달','카네이션','기증','성금']},
+  {key:'event',words:['행사','안내','운영','캠페인','홍보','접수','축하','대회','체육']},
+  {key:'rural',words:['농촌','농가','일손','수확','모내기','농작업']},
+  {key:'medical',words:['헌혈','보건','의료','건강','병원','검진']},
+  {key:'animal',words:['동물','유기견','유기묘','보호소','반려동물']}
+];
+function themeKey(record) {
+  const area=clean(record.area).toLowerCase(),desc=clean(record.desc).toLowerCase();
+  let best='',score=0;
+  for(const theme of themeCues) {
+    const areaHits=theme.words.filter(word=>area.includes(word)).length;
+    const descHits=theme.words.filter(word=>desc.includes(word)).length;
+    const value=areaHits*3+descHits;
+    if(value>score){score=value;best=theme.key;}
+  }
+  return best||('activity:'+normalized(record.area||record.desc).slice(0,16));
+}
+function titleForRows(rows) {
+  const areas=new Map();
+  for(const row of rows){
+    const name=clean(row.area).replace(/^(봉사활동|활동분야)\s*[:：]?\s*/,'');
+    if(name && name.length<=30 && !/^(기타|자원봉사|일반|활동|봉사)$/.test(name)) areas.set(name,(areas.get(name)||0)+1);
+  }
+  const ranked=[...areas].sort((a,b)=>b[1]-a[1]);
+  if(ranked.length && ranked[0][1]>=Math.max(1,Math.ceil(rows.length*0.45))) return ranked[0][0];
+  if(ranked.length>1) return ranked.slice(0,2).map(([name])=>name).join('·').slice(0,36);
+  if(ranked.length) return ranked[0][0];
+  const desc=clean(rows.find(row=>clean(row.desc))?.desc||'');
+  return desc.replace(/\([^)]*\)/g,'').replace(/^(?:\d{4}[.\-]\d{1,2}[.\-]\d{1,2}\s*)/,'').slice(0,28)||'봉사활동';
+}
+function autoGroupRecords() {
+  const buckets=new Map();
+  for(const record of records.filter(row=>row.included)) {
+    const key=themeKey(record);
+    if(!buckets.has(key)) buckets.set(key,[]);
+    buckets.get(key).push(record);
+  }
+  const sorted=[...buckets].sort((a,b)=>b[1].length-a[1].length);
+  const picked=sorted.length<=MAX_GROUPS?sorted:sorted.slice(0,MAX_GROUPS-1).concat([['combined',sorted.slice(MAX_GROUPS-1).flatMap(([,items])=>items)]]);
+  groups=picked.map(([key,items])=>({key,title:titleForRows(items),detail:'',short:''}));
+  const keys=new Map();
+  picked.forEach(([key,items],index)=>items.forEach(item=>keys.set(item,index)));
+  records.forEach(record=>{record.cat=keys.get(record)??Math.max(0,groups.findIndex(group=>group.key===themeKey(record)));});
+  return groups;
+}
 function classify(record) {
-  const area = normalized(record.area);
-  const text = `${record.area} ${record.desc}`.toLowerCase();
-  if (/재난|재해|방역|소독|침수|폭우|수해|복구|감염병|산불|제설/.test(area)) return 1;
-  if (/환경|생태|기후|자원순환/.test(area)) return 2;
-  if (/문화|예술|행사|공연|축제/.test(area)) return 3;
-  if (/이웃|생활편의|사회복지|복지|나눔/.test(area)) return 4;
-  if (/재난|재해|방역|소독|침수|폭우|수해|구조|구급|복구|응급|감염병|산불|제설/.test(text)) return 1;
-  if (/환경|정화|쓰레기|페트|분리배출|재활용|식목|생태|탄소|청소|하천|플로깅|해변/.test(text)) return 2;
-  if (/문화|예술|공연|축제|행사|음악회|관광|전시|연주|무대|캠페인|홍보|체육|대회|축하/.test(text)) return 3;
-  if (/급식|배식|반찬|도시락|돌봄|취약|장애|어르신|노인|아동|청소년|이웃|상담|세탁|목욕|말벗|나눔|배달/.test(text)) return 4;
-  if (/안전|화재|소방|순찰/.test(text)) return 0;
-  return 0;
+  const index=groups.findIndex(group=>group.key===themeKey(record));
+  return index<0?0:index;
 }
 
 const headerAliases = {
@@ -203,47 +247,31 @@ function mergeRecords(incoming) {
   return {added,enriched,duplicates};
 }
 
-async function importPairedWorkbooks() {
-  if (!performanceFile || !timeAuthFile) {
-    announce('실적 엑셀과 시간인증 엑셀을 모두 선택해 주세요. 두 파일을 비교한 뒤 일치하는 승인 실적만 가져옵니다.');
-    return;
-  }
-  announce('두 엑셀을 읽고 활동 내용과 승인 상태를 대조하고 있습니다…');
+async function importSingleWorkbook() {
+  if (!timeAuthFile) { announce('날짜·시간·봉사내용이 있는 1365 원본 엑셀을 선택해 주세요.'); return; }
+  announce('원본 엑셀에서 날짜, 시간, 봉사내용과 승인 상태를 분석하고 있습니다…');
   try {
-    const [summary, detailed] = await Promise.all([parseWorkbook(performanceFile),parseWorkbook(timeAuthFile)]);
-    if (!summary.rows.length || !detailed.rows.length) {
-      throw new Error('두 파일 모두 활동분야와 봉사내용 열이 있는지 확인해 주세요.');
-    }
-    const allowed = new Set(summary.rows.map(record => recordKey(record,false)));
-    const matched = detailed.rows.filter(record => record.approved && allowed.has(recordKey(record,false)));
-    const filteredOut = detailed.rows.length - matched.length;
-    records = [];
-    const merged = mergeRecords(matched);
-    lastImport = {files:2,imported:merged.added,enriched:merged.enriched,duplicates:merged.duplicates,rejected:summary.rejected+detailed.rejected};
-    $('importSummary').textContent = `실적 기준 ${summary.rows.length}건 · 시간인증 ${detailed.rows.length}건 · 일치 승인 ${records.length}건 · 제외 ${filteredOut}건`;
-    renderRows(); renderReferences();
-    if (!selected().length) {
-      announce('두 파일에서 일치하는 승인 실적을 찾지 못했습니다. 활동분야·봉사내용을 확인해 주세요.','error');
-      return;
-    }
+    const parsed=await parseWorkbook(timeAuthFile);
+    if (!parsed.rows.length) throw new Error('활동분야·봉사내용이 있는 표를 찾지 못했습니다. 1365 원본 시간인증 엑셀을 확인해 주세요.');
+    if (!parsed.rows.some(row=>row.date && row.hours>0)) throw new Error('봉사 날짜와 시간 정보를 찾지 못했습니다. 날짜·시간이 포함된 시간인증 원본 파일을 선택해 주세요.');
+    const valid=parsed.rows.filter(row=>row.approved && row.date && row.hours>0);
+    const excluded=parsed.rows.length-valid.length;
+    if (!valid.length) throw new Error('날짜·시간이 있는 승인 실적을 찾지 못했습니다.');
+    records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
+    autoGroupRecords();
+    lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded};
+    $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야`;
+    renderRows();renderReferences();
     draftText({announceResult:false});
-    announce(`실적 기준 ${summary.rows.length}건 중 시간인증 ${detailed.rows.length}건을 AI 없이 대조해 승인된 일치 실적 ${records.length}건을 반영했습니다. 기본 초안을 자동으로 채웠습니다. AI 문장 작성을 원할 때만 아래 버튼을 누르세요.`);
-  } catch (error) {
-    announce(error.message || '엑셀 파일을 읽지 못했습니다. 파일 형식을 확인해 주세요.','error');
-  }
+    announce(`원본 엑셀 한 개에서 ${records.length}건, 총 ${records.reduce((sum,row)=>sum+row.hours,0).toFixed(1)}시간을 확인했습니다. 실제 활동에 맞는 ${groups.length}개 분야와 공적조서 초안을 자동 작성했습니다.`);
+  } catch(error) { announce(error.message||'원본 엑셀을 읽지 못했습니다.','error'); }
 }
-$('performanceUpload').addEventListener('change',event=>{
-  performanceFile=event.target.files?.[0]||null;
-  $('performanceFileName').textContent=performanceFile?.name||'선택 안 됨';
-  if (performanceFile && timeAuthFile) importPairedWorkbooks();
-  else if (performanceFile) announce('실적 엑셀을 선택했습니다. 이제 시간인증 엑셀도 선택해 주세요.');
-});
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if (performanceFile && timeAuthFile) importPairedWorkbooks();
-  else if (timeAuthFile) announce('시간인증 엑셀을 선택했습니다. 이제 실적 엑셀도 선택해 주세요.');
+  if(timeAuthFile) importSingleWorkbook();
 });
+
 
 function selected() { return records.filter(record => record.included); }
 function periodRange() {
@@ -265,7 +293,7 @@ function renderRows() {
     <td>${esc(record.date||'날짜 없음')}</td><td>${esc(record.area||'미분류')}</td>
     <td><input type="text" data-index="${index}" data-key="desc" value="${esc(record.desc)}" aria-label="봉사내용 수정"></td>
     <td><input type="number" min="0" step="0.25" data-index="${index}" data-key="hours" value="${record.hours||''}" aria-label="봉사시간 수정"></td>
-    <td><select data-index="${index}" data-key="cat" aria-label="분야 선택">${groups.map((group,cat)=>`<option value="${cat}" ${record.cat===cat?'selected':''}>${esc(group.title)}</option>`).join('')}</select></td>
+    <td><select data-index="${index}" data-key="cat" aria-label="분야 선택">${groups.length?groups.map((group,cat)=>`<option value="${cat}" ${record.cat===cat?'selected':''}>${esc(group.title)}</option>`).join(''):'<option>자동분류 전</option>'}</select></td>
     <td><button type="button" data-delete="${index}" aria-label="${index+1}번 실적 삭제">삭제</button></td>
   </tr>`).join('');
   $('rows').innerHTML=visible||'<tr><td colspan="7" class="empty-row">엑셀 또는 CSV 파일을 선택해 주세요.</td></tr>';
@@ -289,25 +317,26 @@ $('rows').addEventListener('click',event=>{
 });
 $('addRow').addEventListener('click',()=>{
   records.push({area:'',desc:'직접 입력 실적',date:'',hours:0,approved:true,included:true,cat:0,source:'직접 입력',hasDate:false,importKind:'manual'});
+  if(!groups.length)autoGroupRecords();
   renderRows();
   const input=$('rows').querySelector('tr:last-child input[type=text]'); input?.focus();
 });
 $('clearRows').addEventListener('click',()=>{
-  if (!records.length && !performanceFile && !timeAuthFile) return;
+  if (!records.length && !timeAuthFile) return;
   if (!confirm('가져오거나 직접 입력한 실적을 모두 지울까요?')) return;
-  records=[]; performanceFile=null; timeAuthFile=null;
-  $('performanceUpload').value=''; $('timeAuthUpload').value='';
-  $('performanceFileName').textContent='선택 안 됨'; $('timeAuthFileName').textContent='선택 안 됨';
-  renderRows(); renderReferences(); $('importSummary').textContent=''; announce('실적 목록과 선택한 엑셀을 비웠습니다.');
+  records=[]; groups=[]; timeAuthFile=null;
+  $('timeAuthUpload').value='';
+  $('timeAuthFileName').textContent='선택 안 됨';
+  renderRows(); renderGroups(); $('importSummary').textContent=''; announce('실적 목록과 선택한 엑셀을 비웠습니다.');
 });
 
 function renderGroups() {
-  $('groups').innerHTML=groups.map((group,index)=>`<article class="group">
+  $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
     <div class="field"><label>주요 공적사항</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="실적을 확인한 뒤 문장을 작성하세요.">${esc(group.detail)}</textarea></div>
     <div class="field"><label>공적개요서 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
-  </article>`).join('');
+  </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
   renderReferences();
 }
 function renderReferences() {
@@ -325,8 +354,8 @@ $('groups').addEventListener('input',event=>{
   if (key==='title') renderRows();
 });
 $('regroup').addEventListener('click',()=>{
-  records.forEach(record=>record.cat=classify(record)); renderRows(); renderReferences();
-  announce('활동내용의 단어를 바탕으로 분야를 다시 제안했습니다. 분야별 실적을 꼭 확인하세요.');
+  autoGroupRecords(); renderRows(); draftText({announceResult:false});
+  announce(`실제 활동내용을 다시 분석해 ${groups.length}개 분야의 제목과 공적내용을 작성했습니다. 확인 후 필요한 부분만 수정하세요.`);
 });
 
 function draftText({announceResult=true}={}) {
