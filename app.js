@@ -142,10 +142,10 @@ function classify(record) {
 
 const headerAliases = {
   area: ['활동분야','봉사분야','분야','활동영역','봉사영역'],
-  date: ['봉사일자','활동일자','실적일자','봉사날짜','활동날짜','봉사일'],
-  time: ['봉사시간','활동시간','인정시간','실적시간','시간(분)','봉사시간(분)'],
-  desc: ['봉사내용','활동내용','실적내용','봉사활동내용','활동명','프로그램명','내용'],
-  status: ['승인상태','승인여부','처리상태','상태']
+  date: ['봉사일자','활동일자','실적일자','봉사날짜','활동날짜','봉사일','활동일시','봉사일시','봉사활동일자','봉사시작일','활동일','활동기간'],
+  time: ['봉사시간','활동시간','인정시간','실적시간','시간(분)','봉사시간(분)','인증시간','인정봉사시간','총봉사시간','활동시간(분)'],
+  desc: ['봉사내용','활동내용','실적내용','봉사활동내용','활동명','프로그램명','내용','봉사활동명','실적명'],
+  status: ['승인상태','승인여부','처리상태','상태','인증상태','실적상태']
 };
 function headerKey(value) { return normalized(value).replace(/봉사실적|자원봉사/g,''); }
 function findHeader(rows) {
@@ -176,7 +176,11 @@ function rowsToRecords(rows, sourceName) {
     if (!desc || /^(합계|총계|계)$/i.test(desc)) continue;
     const area = match.area >= 0 ? clean(row[match.area]) : '';
     const date = match.date >= 0 ? normalizeDate(row[match.date]) : '';
-    const hours = match.time >= 0 ? hoursValue(row[match.time]) : 0;
+    const rawTime=match.time >= 0 ? row[match.time] : '';
+    const timeHeader=match.time >= 0 ? clean(rows[rowIndex]?.[match.time]) : '';
+    const timeIsMinutes=/(?:\(분\)|분$)/.test(timeHeader);
+    const isPlainNumber=typeof rawTime==='number'||/^\d+(?:\.\d+)?$/.test(clean(rawTime));
+    const hours=match.time>=0 ? (timeIsMinutes&&isPlainNumber ? Number(rawTime)/60 : hoursValue(rawTime)) : 0;
     const status = match.status >= 0 ? clean(row[match.status]) : '';
     const approved = !status || ((/승인|완료|인정/.test(status)) && !/미승인|미인정|반려|취소|대기/.test(status));
     const record = {area,desc,date,hours,approved,included:approved,cat:0,source:sourceName||'',hasDate:Boolean(date)};
