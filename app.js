@@ -283,7 +283,14 @@ $('timeAuthUpload').addEventListener('change',event=>{
       $('name').value=matched[1]; lastAutoName=matched[1]; // 파일명에 이름이 있을 때만 채움
     }
   }
-  if(timeAuthFile) importSingleWorkbook();
+  $('applyWorkbook').disabled=!timeAuthFile;
+  if(timeAuthFile) announce('엑셀파일을 선택했습니다. ‘엑셀 분석·반영하기’를 누르면 공적내용을 작성합니다.');
+});
+$('applyWorkbook').addEventListener('click',async()=>{
+  if(!timeAuthFile){announce('먼저 원본 엑셀을 선택해 주세요.','error');return;}
+  const button=$('applyWorkbook');button.disabled=true;button.textContent='엑셀 분석 중…';
+  try { await importSingleWorkbook(); }
+  finally { button.disabled=false;button.textContent='엑셀 분석·반영하기'; }
 });
 
 
@@ -340,7 +347,7 @@ $('clearRows').addEventListener('click',()=>{
   if (!confirm('가져오거나 직접 입력한 실적을 모두 지울까요?')) return;
   records=[]; groups=[]; timeAuthFile=null; lastAutoName='';
   $('timeAuthUpload').value='';
-  $('timeAuthFileName').textContent='선택 안 됨';
+  $('timeAuthFileName').textContent='선택 안 됨'; $('applyWorkbook').disabled=true;
   ['gist','intro','character','reputation','matching'].forEach(id=>$(id).value=''); updateCharacterCount();
   renderRows(); renderGroups(); $('importSummary').textContent=''; announce('실적 목록과 선택한 엑셀을 비웠습니다.');
 });
