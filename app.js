@@ -326,7 +326,8 @@ async function importSingleWorkbook() {
     // 명시적인 성명 셀을 우선하고, 없으면 파일명 첫 부분의 한글 이름을 사용한다.
     const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
     const personal={...parsed.personal};
-    if(!personal.name&&filenameName)personal.name=filenameName;
+    // 성명은 반드시 적용 버튼의 확인을 받은 이름만 사용한다.
+    delete personal.name;
     const filledPersonal=applyPersonalFields(personal);
     records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
     autoGroupRecords();
@@ -340,29 +341,36 @@ async function importSingleWorkbook() {
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if(timeAuthFile){
-    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
-    if(filenameName&&(!val('name')||val('name')===lastAutoName)){
-      $('name').value=filenameName;lastAutoName=filenameName;
-    }
-  }
+  if(timeAuthFile) announce('엑셀을 선택했습니다. 적용 버튼을 누르면 성명을 확인한 후 반영합니다.');
   $('applyWorkbook').disabled=!timeAuthFile;
   if(timeAuthFile) announce('엑셀파일을 선택했습니다. ‘엑셀 분석·반영하기’를 누르면 공적내용을 작성합니다.');
 });
+function confirmWorkbookNominee(){
+  const filenameName=nameFromWorkbookFilename(timeAuthFile?.name||'');
+  if(!filenameName){
+    announce('파일명에서 성명을 찾지 못했습니다. 파일명을 확인해 주세요.','error');
+    return false;
+  }
+  if(!window.confirm(filenameName+'이(가) 맞습니까?'))return false;
+  $('name').value=filenameName;
+  lastAutoName=filenameName;
+  const status=$('nameAutoStatus');
+  if(status)status.textContent='확인한 성명: '+filenameName;
+  return true;
+}
 $('applyAllWorkbook').addEventListener('click',async()=>{
   if(!timeAuthFile){announce('먼저 원본 봉사실적 엑셀 파일을 선택해 주세요.','error');$('timeAuthUpload').click();return;}
+  if(!confirmWorkbookNominee())return;
   const button=$('applyAllWorkbook');button.disabled=true;button.textContent='전체 내용 적용 중…';
-  try {
-    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
-    if(filenameName){$('name').value=filenameName;lastAutoName=filenameName;}
-    await importSingleWorkbook();
-  } finally {button.disabled=false;button.textContent='전체 내용에 적용';}
+  try {await importSingleWorkbook();}
+  finally {button.disabled=false;button.textContent='전체 내용에 적용';}
 });
 $('applyWorkbook').addEventListener('click',async()=>{
   if(!timeAuthFile){announce('먼저 원본 엑셀을 선택해 주세요.','error');return;}
+  if(!confirmWorkbookNominee())return;
   const button=$('applyWorkbook');button.disabled=true;button.textContent='엑셀 분석 중…';
-  try { await importSingleWorkbook(); }
-  finally { button.disabled=false;button.textContent='엑셀 분석·반영하기'; }
+  try {await importSingleWorkbook();}
+  finally {button.disabled=false;button.textContent='엑셀 분석·반영하기';}
 });
 
 
