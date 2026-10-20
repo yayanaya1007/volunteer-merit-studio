@@ -826,37 +826,70 @@ $('downloadHwpx').addEventListener('click',exportHwpx);
 function projectData() {
   return {format:'volunteer-merit-studio',version:3,fields:Object.fromEntries(fieldIds.map(id=>[id,$(id).value])),records,groups,stamp,stampSizes:{recommender:$('recommenderStampSize').value,investigator:$('investigatorStampSize').value}};
 }
-function saveProject() {
-  const content=JSON.stringify(projectData(),null,2);
-  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([content],{type:'application/json'}));link.download=`${safeFilename(val('year'))}_공적조서_${safeFilename(val('name'))}_작업.json`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
+const SAVED_PROJECTS_KEY='volunteer-merit-studio-saved-projects-v1';
+function savedProjects(){
+  try {return JSON.parse(localStorage.getItem(SAVED_PROJECTS_KEY)||'[]');}
+  catch {return [];}
+}
+function renderSavedProjects(){
+  const list=$('savedProjectsList');if(!list)return;
+  const items=savedProjects();list.replaceChildren();
+  if(!items.length){const empty=document.createElement('p');empty.className='hint';empty.textContent='이 기기에 저장된 작업이 없습니다.';list.append(empty);return;}
+  for(const item of items){
+    const row=document.createElement('div');row.className='saved-project-row';
+    const label=document.createElement('span');label.textContent=`${item.name||'이름 미입력'} · ${item.year||''}년 · ${new Date(item.savedAt).toLocaleString('ko-KR')}`;
+    const open=document.createElement('button');open.className='button button-light';open.type='button';open.textContent='불러오기';open.addEventListener('click',()=>{if(confirm('현재 작업을 저장된 작업으로 바꿀까요?'))loadProjectData(item.data);});
+    const remove=document.createElement('button');remove.className='button button-text';remove.type='button';remove.textContent='삭제';remove.addEventListener('click',()=>{if(!confirm('이 기기의 저장 목록에서 삭제할까요?'))return;localStorage.setItem(SAVED_PROJECTS_KEY,JSON.stringify(savedProjects().filter(saved=>saved.id!==item.id)));renderSavedProjects();});
+    row.append(label,open,remove);list.append(row);
+  }
+}
+function loadProjectData(data){
+  const groupsToLoad=Array.isArray(data.groups)?data.groups:data.groupData;
+  const supported=data.fields&&Array.isArray(data.records)&&Array.isArray(groupsToLoad)&&((data.format==='volunteer-merit-studio')||data.version===1);
+  if(!supported)throw new Error('이 앱에서 저장한 작업파일이 아닙니다.');
+  fieldIds.forEach(id=>{if($(id))$(id).value=data.fields[id]??'';});
+  records=data.records.map(record=>({...record,cat:Math.max(0,Number(record.cat)||0)}));
+  if(data.version>=3&&groupsToLoad.length>=1&&groupsToLoad.length<=MAX_GROUPS){
+    groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:group.detail||'',short:group.short||''}));
+    records.forEach(record=>{record.cat=Math.min(groups.length-1,record.cat);});
+  }else{
+    autoGroupRecords();if(records.length)draftText({announceResult:false});
+  }
+  stamp=data.stamp||null;
+  if(stamp){$('stampImage').src=stamp.dataUrl;$('stampName').textContent=stamp.name||'도장 이미지';$('stampPreview').hidden=false;}
+  else $('stampPreview').hidden=true;
+  $('recommenderStampSize').value=data.stampSizes?.recommender||22;
+  $('investigatorStampSize').value=data.stampSizes?.investigator||22;
+  updateStampSizeLabels();renderGroups();renderRows();updateCharacterCount();
+  announce('저장된 작업을 불러왔습니다. 계속 수정할 수 있습니다.');
+}
+function saveProject(){
+  const data=projectData();
+  const content=JSON.stringify(data,null,2);
+  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([content],{type:'application/json'}));
+  link.download=`${safeFilename(val('year'))}_공적조서_${safeFilename(val('name'))}_작업.json`;
+  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
+  try{
+    const items=savedProjects(),now=new Date().toISOString();
+    items.unshift({id:now+'-'+Math.random().toString(36).slice(2),name:val('name'),year:val('year'),savedAt:now,data});
+    localStorage.setItem(SAVED_PROJECTS_KEY,JSON.stringify(items.slice(0,30)));
+    renderSavedProjects();
+    announce('작업파일을 다운로드하고 이 기기의 저장 목록에도 보관했습니다.');
+  }catch(error){
+    announce('작업파일은 다운로드했습니다. 이 기기의 저장 공간이 부족하거나 차단되어 목록 저장은 되지 않았습니다.','error');
+  }
 }
 $('saveProject').addEventListener('click',saveProject);
 $('jsonFile').addEventListener('change',async event=>{
   const file=event.target.files?.[0];if(!file)return;
-  try {
+  try{
     const data=JSON.parse(await file.text());
-    const groupsToLoad=Array.isArray(data.groups)?data.groups:data.groupData;
-    const supported=data.fields&&Array.isArray(data.records)&&Array.isArray(groupsToLoad)&&((data.format==='volunteer-merit-studio')||data.version===1);
-    if (!supported) throw new Error('이 앱에서 저장한 작업파일이 아닙니다.');
-    if (!confirm('현재 화면의 자료를 불러온 작업파일로 바꿀까요?')) return;
-    fieldIds.forEach(id=>{if($(id))$(id).value=data.fields[id]??'';});
-    records=data.records.map(record=>({...record,cat:Math.max(0,Number(record.cat)||0)}));
-    if (data.version>=3 && groupsToLoad.length>=1 && groupsToLoad.length<=MAX_GROUPS) {
-      groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:group.detail||'',short:group.short||''}));
-      records.forEach(record=>{record.cat=Math.min(groups.length-1,record.cat);});
-    } else {
-      // 과거 고정 5분야 작업파일은 실제 실적을 다시 분석하여 4개 이하로 구성한다.
-      autoGroupRecords();
-      if(records.length) draftText({announceResult:false});
-    }
-
-    stamp=data.stamp||null;
-    if(stamp){$('stampImage').src=stamp.dataUrl;$('stampName').textContent=stamp.name||'도장 이미지';$('stampPreview').hidden=false;}else{$('stampPreview').hidden=true;}
-    $('recommenderStampSize').value=data.stampSizes?.recommender||22;$('investigatorStampSize').value=data.stampSizes?.investigator||22;
-    updateStampSizeLabels();renderGroups();renderRows();updateCharacterCount();announce('작업파일을 불러왔습니다.');
-  } catch(error) {announce(`작업파일을 읽지 못했습니다: ${error.message}`,'error');}
-  finally {event.target.value='';}
+    if(!confirm('현재 화면의 자료를 불러온 작업파일로 바꿀까요?'))return;
+    loadProjectData(data);
+  }catch(error){announce(`작업파일을 읽지 못했습니다: ${error.message}`,'error');}
+  finally{event.target.value='';}
 });
+renderSavedProjects();
 
 $('exportCSV').addEventListener('click',()=>{
   const rows=[['활동분야','봉사일자','봉사시간(시간)','봉사내용','분류']].concat(selected().map(record=>[record.area,record.date,record.hours||'',record.desc,groups[record.cat]?.title||'']));
