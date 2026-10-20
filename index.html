@@ -11,7 +11,7 @@
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="api-config.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="app.js?v=20261020-namefix-3"></script>
 </head>
 <body>
   <header class="topbar">
@@ -41,7 +41,7 @@
       <div class="form-grid">
         <label>행사연도<input id="year" type="number" value="2026" min="2000" max="2100"></label>
         <label>행사명<input id="event" value="자원봉사자 기념식"></label>
-        <label>성명<input id="name" placeholder="추천 대상자"></label>
+        <label>성명<input id="name" placeholder="추천 대상자" autocomplete="off"><small id="nameAutoStatus" class="hint">엑셀 파일을 선택하면 파일명에서 이름을 자동 입력합니다.</small></label>
         <label>한자 성명<input id="hanja" placeholder="해당하는 경우"></label>
         <label>생년월일<input id="birth" placeholder="1971.05.09"></label>
         <label>성별<select id="gender"><option value="">선택</option><option>여</option><option>남</option></select></label>
@@ -103,5 +103,26 @@
 
   <footer>Volunteer Merit Studio <span>·</span> 실적 파일은 브라우저에서 읽고, 결과는 이 기기에 저장합니다. AI 초안 요청 시 활동 내용만 OpenAI로 전송됩니다.</footer>
   </main>
+<script>
+(function(){
+  const fileInput=document.getElementById('timeAuthUpload');
+  const nameInput=document.getElementById('name');
+  const status=document.getElementById('nameAutoStatus');
+  if(!fileInput||!nameInput)return;
+  fileInput.addEventListener('change',function(){
+    const file=this.files&&this.files[0];
+    if(!file)return;
+    const filename=file.name.replace(/\.(xlsx|xls|csv)$/i,'').trim();
+    const match=filename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
+    if(match){
+      nameInput.value=match[1];
+      nameInput.dispatchEvent(new Event('input',{bubbles:true}));
+      if(status)status.textContent='파일명에서 자동 입력: '+match[1];
+    }else if(status){
+      status.textContent='파일명에서 성명을 찾지 못했습니다. 파일명 앞에 성명이 있는지 확인하세요.';
+    }
+  });
+})();
+</script>
 </body>
 </html>
