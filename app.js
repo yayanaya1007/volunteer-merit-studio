@@ -210,19 +210,67 @@ function parseCsv(text) {
   return rows;
 }
 
+// 원본 파일의 명시적인 인적사항만 추출한다. 활동기관명 등은 소속으로 추정하지 않는다.
+const personalFieldLabels={
+  name:['성명','봉사자명','회원명','이름'],
+  birth:['생년월일','생일','출생일'],
+  gender:['성별'],
+  org:['소속단체','소속기관','소속'],
+  address:['주소','거주지'],
+  phone:['휴대전화','휴대폰번호','휴대폰','연락처','전화번호'],
+  job:['직업'],
+  rank:['직급'],
+  position:['직위']
+};
+function extractPersonalFields(rows){
+  const found={};
+  const identify=label=>{
+    const key=normalized(label).replace(/[:：]/g,'');
+    return Object.entries(personalFieldLabels).find(([,aliases])=>aliases.some(alias=>normalized(alias)===key))?.[0];
+  };
+  for(const row of rows.slice(0,45)){
+    if(!Array.isArray(row))continue;
+    for(let i=0;i<row.length;i++){
+      const cell=clean(row[i]);
+      const inline=cell.match(/^([^:：]{1,12})[:：]\s*(.+)$/);
+      if(inline){const field=identify(inline[1]);if(field&&!found[field])found[field]=clean(inline[2]);}
+      const field=identify(cell);
+      if(field&&!found[field]){
+        const next=clean(row[i+1]);
+        if(next&&!identify(next))found[field]=next;
+      }
+    }
+  }
+  return found;
+}
+function applyPersonalFields(info){
+  let filled=0;
+  for(const [id,raw] of Object.entries(info||{})){
+    const input=$(id);if(!input||!raw||id==='hanja')continue;
+    let value=clean(raw);
+    if(id==='gender'){if(/^(여|여성|여자)$/.test(value))value='여';else if(/^(남|남성|남자)$/.test(value))value='남';else continue;}
+    if(id==='name'&&!/^[가-힣]{2,5}$/.test(value))continue;
+    if(id==='birth'&&/^[0-9]{8}$/.test(value))value=value.slice(0,4)+'.'+value.slice(4,6)+'.'+value.slice(6);
+    if(input.value&&!(id==='name'&&input.value===lastAutoName))continue;
+    input.value=value;filled++;
+    if(id==='name')lastAutoName=value;
+  }
+  return filled;
+}
 async function parseWorkbook(file) {
-  if (file.name.toLowerCase().endsWith('.csv')) return rowsToRecords(parseCsv(await file.text()), file.name);
+  if (file.name.toLowerCase().endsWith('.csv')) return {...rowsToRecords(parseCsv(await file.text()), file.name),personal:extractPersonalFields(parseCsv(await file.text()))};
   if (!window.XLSX) throw new Error('번들된 엑셀 라이브러리를 불러오지 못했습니다. CSV로 저장해 올려주세요.');
   const workbook = XLSX.read(await file.arrayBuffer(), {type:'array',cellDates:true});
   const found = [];
-  let rejected = 0, hasDescriptionColumn = false;
+  let rejected = 0, hasDescriptionColumn = false, personal={};
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
     const parsed = rowsToRecords(rows,`${file.name} · ${sheetName}`);
+    personal={...extractPersonalFields(rows),...personal};
     found.push(...parsed.rows); rejected += parsed.rejected; hasDescriptionColumn ||= parsed.hasDescriptionColumn;
   }
-  return {rows:found,rejected,hasDescriptionColumn};
+  return {rows:found,rejected,hasDescriptionColumn,personal};
 }
 
 function recordKey(record, withDate=true) {
@@ -265,10 +313,11 @@ async function importSingleWorkbook() {
     const valid=parsed.rows.filter(row=>row.approved && row.date && row.hours>0);
     const excluded=parsed.rows.length-valid.length;
     if (!valid.length) throw new Error('날짜·시간이 있는 승인 실적을 찾지 못했습니다.');
+    const filledPersonal=applyPersonalFields(parsed.personal);
     records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
     autoGroupRecords();
     lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded};
-    $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야`;
+    $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
     renderRows();renderReferences();
     draftText({announceResult:false});
     announce(`원본 엑셀 한 개에서 ${records.length}건, 총 ${records.reduce((sum,row)=>sum+row.hours,0).toFixed(1)}시간을 확인했습니다. 실제 활동에 맞는 ${groups.length}개 분야와 공적조서 초안을 자동 작성했습니다.`);
@@ -277,7 +326,7 @@ async function importSingleWorkbook() {
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if(timeAuthFile) {
+  if(false && timeAuthFile) {
     const matched=timeAuthFile.name.match(/^([가-힣]{2,5})\s*(?:\(\d+\)|[_\-\s])/);
     if(matched && (!val('name') || val('name')===lastAutoName)) {
       $('name').value=matched[1]; lastAutoName=matched[1]; // 파일명에 이름이 있을 때만 채움
