@@ -499,11 +499,26 @@ function documentModel() {
     year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
+function renderMobilePreview(){
+  const model=documentModel();
+  const safe=value=>esc(String(value??''));
+  const row=(label,value)=>`<tr><th class="doc-label">${safe(label)}</th><td>${safe(value||'')}</td></tr>`;
+  const groups=model.groups||[];
+  const pages=[
+    `<section class="doc-page"><h3>공 적 조 서</h3><table>${row('성 명',model.name)}${row('소 속',model.org)}${row('직 급 · 직 책',[model.rank,model.position].filter(Boolean).join(' / '))}${row('공 적 기 간',model.period)}${row('공 적 요 지',model.gist)}</table><h4>주요 공적사항</h4><div class="doc-block">${safe(model.intro)}</div>${groups.map(g=>`<h4>${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
+    `<section class="doc-page"><h3>공 적 개 요 서</h3><table>${row('성 명',model.name)}${row('소 속',model.org)}${row('공 적 기 간',model.period)}</table><h4>공적 개요</h4>${groups.map(g=>`<h4>${safe(g.title)}</h4><div class="doc-block">${safe(g.short)}</div>`).join('')}</section>`,
+    `<section class="doc-page"><h3>현 지 조 사 확 인 서</h3><table>${row('성 명',model.name)}${row('품 성',model.character)}${row('지 역 여 론',model.reputation)}${row('공적사항 일치 여부',model.matching)}</table></section>`
+  ];
+  $('documentPreview').innerHTML=`<div class="mobile-preview-pages">${pages.join('')}</div>`;
+  $('documentPreview').hidden=false;
+  $('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+}
 let previewObjectUrl='';
 $('previewBtn').addEventListener('click',async()=>{
   const status=$('exportStatus'),button=$('previewBtn');
   if(!['localhost','127.0.0.1'].includes(location.hostname)){
-    status.textContent='원본 한글 서식과 글꼴 그대로 미리보려면 한컴오피스 한글이 설치된 PC의 로컬 앱에서 미리보기를 열어 주세요. 저장한 HWPX도 한글에서 원본 서식으로 열립니다.';
+    renderMobilePreview();
+    status.textContent='모바일·웹용 내용 확인 미리보기입니다. 실제 한글 문서의 글꼴·셀 크기·줄바꿈과는 차이가 있을 수 있습니다. 원본 양식 확인은 저장한 HWPX를 한글에서 열어 확인하세요.';
     status.classList.add('notice-caution');return;
   }
   button.disabled=true;button.textContent='한글 서식으로 렌더링 중…';
