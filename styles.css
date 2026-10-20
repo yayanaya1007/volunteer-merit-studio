@@ -20,3 +20,8 @@
 .saved-project-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid #e2e7ec;border-radius:8px}
 .saved-project-row>span{flex:1 1 210px;overflow-wrap:anywhere}
 @media(max-width:600px){.saved-projects-section{padding:12px}.saved-project-row .button{flex:1}}
+
+/* Keep the two primary Excel actions side by side on phones and desktop. */
+.upload-row .excel-main-actions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;width:100%;order:0;align-items:stretch}
+.upload-row .excel-main-actions .file-picker{width:100%;min-width:0;min-height:52px;padding:8px 6px;text-align:center;white-space:normal;font-size:14px}
+.upload-row .excel-main-actions #applyAllWorkbook{display:flex!important;align-items:center;justify-content:center;width:100%;min-width:0;min-height:52px;padding:8px 6px;text-align:center;white-space:normal;font-size:15px;font-weight:700}
