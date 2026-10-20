@@ -25,3 +25,7 @@
 .upload-row .excel-main-actions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;width:100%;order:0;align-items:stretch}
 .upload-row .excel-main-actions .file-picker{width:100%;min-width:0;min-height:52px;padding:8px 6px;text-align:center;white-space:normal;font-size:14px}
 .upload-row .excel-main-actions #applyAllWorkbook{display:flex!important;align-items:center;justify-content:center;width:100%;min-width:0;min-height:52px;padding:8px 6px;text-align:center;white-space:normal;font-size:15px;font-weight:700}
+
+/* Match both hero action buttons in size and alignment on iPhone and desktop. */
+.intro-row .intro-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch;width:100%;max-width:560px}
+.intro-row .intro-actions #chooseRecords,.intro-row .intro-actions #applyAllWorkbook{box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-width:0!important;min-height:56px!important;height:56px!important;margin:0!important;padding:8px 10px!important;text-align:center!important;white-space:normal!important;line-height:1.3!important;font-size:14px!important;font-weight:700!important}
