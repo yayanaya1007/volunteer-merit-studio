@@ -437,8 +437,8 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>주요 공적사항</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="실적을 확인한 뒤 문장을 작성하세요.">${esc(group.detail)}</textarea></div>
-    <div class="field"><label>공적개요서 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (핵심 활동 2개)</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="실적을 확인한 뒤 문장을 작성하세요.">${esc(group.detail)}</textarea></div>
+    <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
   renderReferences();
@@ -498,6 +498,15 @@ function activityTokens(value){
   const ignore=new Set(['봉사','활동','지원','지역','사회','진행','참여','운영','관리','관련','기타','대한','위한','행사','주민','대상','프로그램']);
   return compactActivity(value).split(/[^가-힣A-Za-z0-9]+/).filter(word=>word.length>=2&&!ignore.has(word));
 }
+function meaningfulActivity(label,area){
+  const value=clean(label).replace(/\s/g,'');
+  const category=clean(area).replace(/\s/g,'');
+  return value && value!==category && !/^(환경정화|환경보호|문화예술|생활편의|재난재해|지역안전|교통안전|봉사|자원봉사|기타)(활동|봉사)?$/.test(value);
+}
+function compactMeritSummary(rows,maxItems=2){
+  const items=summarizedActivities(rows,maxItems+3).filter(item=>meaningfulActivity(item,rows[0]?.area||''));
+  return items.slice(0,maxItems);
+}
 function summarizedActivities(rows,maxItems=3){
   const clusters=[];
   for(const row of rows){
@@ -535,10 +544,10 @@ function draftText({announceResult=true}={}) {
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     if(!rows.length){group.detail='';group.short='';return;}
-    const summary=summarizedActivities(rows,2).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
+    const summary=compactMeritSummary(rows,2).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
     const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
     // 분야별 1~2개의 핵심 내용만 짧게 작성하고 같은 기여 문구를 반복하지 않는다.
-    group.detail=concise.map(item=>'• '+item).join('\n');
+    group.detail=concise.length?concise.map(item=>'• '+item).join('\n'):'';
     group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
 
   });
