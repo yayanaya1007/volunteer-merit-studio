@@ -349,6 +349,15 @@ $('timeAuthUpload').addEventListener('change',event=>{
   $('applyWorkbook').disabled=!timeAuthFile;
   if(timeAuthFile) announce('엑셀파일을 선택했습니다. ‘엑셀 분석·반영하기’를 누르면 공적내용을 작성합니다.');
 });
+$('applyAllWorkbook').addEventListener('click',async()=>{
+  if(!timeAuthFile){announce('먼저 원본 봉사실적 엑셀 파일을 선택해 주세요.','error');$('timeAuthUpload').click();return;}
+  const button=$('applyAllWorkbook');button.disabled=true;button.textContent='전체 내용 적용 중…';
+  try {
+    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
+    if(filenameName){$('name').value=filenameName;lastAutoName=filenameName;}
+    await importSingleWorkbook();
+  } finally {button.disabled=false;button.textContent='전체 내용에 적용';}
+});
 $('applyWorkbook').addEventListener('click',async()=>{
   if(!timeAuthFile){announce('먼저 원본 엑셀을 선택해 주세요.','error');return;}
   const button=$('applyWorkbook');button.disabled=true;button.textContent='엑셀 분석 중…';
