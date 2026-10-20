@@ -129,7 +129,7 @@ function autoGroupRecords() {
   }
   const sorted=[...buckets].sort((a,b)=>b[1].length-a[1].length);
   const picked=sorted.length<=MAX_GROUPS?sorted:sorted.slice(0,MAX_GROUPS-1).concat([['combined',sorted.slice(MAX_GROUPS-1).flatMap(([,items])=>items)]]);
-  groups=picked.map(([key,items])=>({key,title:titleForRows(items),detail:'',short:''}));
+  groups=picked.map(([key,items])=>({key,title:key==='combined' ? sorted.slice(MAX_GROUPS-1).slice(0,2).map(([,rows])=>titleForRows(rows)).join('·').slice(0,34)+' 등' : titleForRows(items),detail:'',short:''}));
   const keys=new Map();
   picked.forEach(([key,items],index)=>items.forEach(item=>keys.set(item,index)));
   records.forEach(record=>{record.cat=keys.get(record)??Math.max(0,groups.findIndex(group=>group.key===themeKey(record)));});
@@ -327,6 +327,7 @@ $('clearRows').addEventListener('click',()=>{
   records=[]; groups=[]; timeAuthFile=null;
   $('timeAuthUpload').value='';
   $('timeAuthFileName').textContent='선택 안 됨';
+  ['gist','intro','character','reputation','matching'].forEach(id=>$(id).value=''); updateCharacterCount();
   renderRows(); renderGroups(); $('importSummary').textContent=''; announce('실적 목록과 선택한 엑셀을 비웠습니다.');
 });
 
@@ -361,19 +362,21 @@ $('regroup').addEventListener('click',()=>{
 function draftText({announceResult=true}={}) {
   const included=selected();
   if (!included.length) { if (announceResult) announce('먼저 봉사실적을 가져오거나 직접 입력해 주세요.','error'); return false; }
+  if (!groups.length) autoGroupRecords();
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     const descriptions=[...new Set(rows.map(record=>clean(record.desc)).filter(Boolean))];
     if (!rows.length) {
       group.detail=''; group.short=''; return;
     }
-    const examples=descriptions.slice(0,4).join('·');
-    group.detail=`${group.title} 분야 봉사활동 ${rows.length}건에 참여함${examples?` (예: ${examples})`:''}.`;
-    group.short=descriptions.length>1?`${descriptions.slice(0,2).join('·')} 등 ${rows.length}건`: `${descriptions[0]} 활동 ${rows.length}건`;
+    const examples=descriptions.slice(0,5).join(', ');
+    const sum=rows.reduce((total,row)=>total+Number(row.hours||0),0);
+    group.detail=`${group.title}과 관련하여 ${examples||'기록된 봉사활동'}${descriptions.length>5?' 등':''}에 참여함. 해당 분야의 확인된 활동은 ${rows.length}건, ${sum.toFixed(1)}시간임.`;
+    group.short=`${descriptions.slice(0,2).join('·')}${descriptions.length>2?' 등':''} (${rows.length}건)`;
   });
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
-  $('gist').value=`${active.slice(0,3).join('·')||'자원봉사'} 분야에서 꾸준히 활동하여 지역사회 발전에 기여함.`.slice(0,50);
+  $('gist').value=`${active.slice(0,2).join('·')||'자원봉사'} 활동으로 지역사회에 기여함.`.slice(0,50);
   const {start,end}=periodRange();
   const period=start&&end?`${start.replaceAll('-','.')}부터 ${end.replaceAll('-','.')}까지`:'확인된 공적 기간 동안';
   const hours=included.some(record=>record.hours>0)?` 총 ${included.reduce((sum,record)=>sum+Number(record.hours||0),0).toFixed(1)}시간`:' 봉사시간 확인 필요';
@@ -418,7 +421,7 @@ async function generateAIDraft({announceResult=true}={}) {
   }
 }
 $('draft').addEventListener('click',async()=>{
-  if (!selected().length) { announce('먼저 두 엑셀을 선택하거나 실적을 직접 입력해 주세요.','error'); return; }
+  if (!selected().length) { announce('먼저 1365 원본 엑셀 하나를 선택해 주세요.','error'); return; }
   if (!isLocalAI && !publicAIUrl) { announce('공개 AI 서버 연결이 아직 준비 중입니다. 기본 초안은 AI 없이 사용할 수 있습니다.','error'); return; }
   if (!isLocalAI && !sessionStorage.getItem('merit-ai-access-code')) { announce('AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error'); $('aiAccessCode').focus(); return; }
   const aiUsed=await generateAIDraft({announceResult:false});
@@ -552,25 +555,26 @@ async function createTemplateHwpx(model) {
     '{{recommender}}':model.recommender,'{{gender}}':model.gender,'{{character}}':model.character,'{{reputation}}':model.reputation,'{{matching}}':model.matching,
     '{{overview}}':model.groups.map(group=>`○ ${group.title}  - ${group.short||'해당 분야 실적 없음'}`).join('   ')
   };
-  model.groups.forEach((group,index)=>{
-    values[`{{g${index}title}}`]=group.title;
-    values[`{{g${index}detail}}`]=group.detail;
-    values[`{{g${index}short}}`]=group.short;
-  });
+  for(let index=0;index<5;index++){
+    const group=model.groups[index];
+    values[`{{g${index}title}}`]=group?.title||'';
+    values[`{{g${index}detail}}`]=group?.detail||'';
+    values[`{{g${index}short}}`]=group?.short||'';
+  }
   const documentDate=new Date(`${model.docDate}T00:00:00`);
   values['{{docDateKor}}']=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
   const fallbackAge=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;return String(Math.max(0,new Date(model.docDate).getFullYear()-year));})();
   const staticReplacements=[
-    ['지역 문화관광축제 운영 지원을 위한 자원봉사활동에 참여하여 방문객 안내',model.groups[3]?.detail],
+    ['지역 문화관광축제 운영 지원을 위한 자원봉사활동에 참여하여 방문객 안내',model.groups[0]?.detail||''],
     ['특히 육군훈련소 입영문화제, 육군병장문화예술제, 연무읍 승격 60주년 음악회',''],
     ['등 각종 지역행사에 참여하여 원활한 행사 운영에 기여함.',''],
-    ['설맞이 어르신 떡국, 사랑의 빵 나눔, 어버이날 카네이션 달아드리기 등',model.groups[4]?.detail],
+    ['설맞이 어르신 떡국, 사랑의 빵 나눔, 어버이날 카네이션 달아드리기 등',model.groups[1]?.detail||''],
     ['{{g4title}} 활동에 참여하여 지역사회 발전에 기여함.',''],
-    ['마을담당제 안전점검, 소방시설 점검',model.groups[0]?.short],['취약가구 순찰 및 화재예방 활동',''],
-    ['집중호우 피해 농가 복구와 코로나19',model.groups[1]?.short],['방역·소독 활동',''],
-    ['환경정화 및 투명페트병 분리배출 활동을',model.groups[2]?.short],['통해 쾌적한 환경 조성',''],
-    ['각종 지역행사에 방문객 편의 지원 및',model.groups[3]?.short],['행사장 안전관리 활동',''],
-    ['어르신 나눔 활동, 카네이션 전달 및',model.groups[4]?.short],['취약가구 생활안전 지원',''],
+    ['마을담당제 안전점검, 소방시설 점검',model.groups[0]?.short||''],['취약가구 순찰 및 화재예방 활동',''],
+    ['집중호우 피해 농가 복구와 코로나19',model.groups[1]?.short||''],['방역·소독 활동',''],
+    ['환경정화 및 투명페트병 분리배출 활동을',model.groups[2]?.short||''],['통해 쾌적한 환경 조성',''],
+    ['각종 지역행사에 방문객 편의 지원 및',model.groups[3]?.short||''],['행사장 안전관리 활동',''],
+    ['어르신 나눔 활동, 카네이션 전달 및',''],['취약가구 생활안전 지원',''],
     ['투철한 모범적인 시민임.',''],['신뢰와 존경을 받고 있으며',''],['평가받고 있음.',''],['55세',fallbackAge?`${fallbackAge}세`:'']
   ];
   for(const [search,value] of staticReplacements)replaceTemplateText(doc,search,cleanTemplateValue(value));
@@ -668,7 +672,7 @@ async function exportHwpx() {
 $('downloadHwpx').addEventListener('click',exportHwpx);
 
 function projectData() {
-  return {format:'volunteer-merit-studio',version:2,fields:Object.fromEntries(fieldIds.map(id=>[id,$(id).value])),records,groups,stamp,stampSizes:{recommender:$('recommenderStampSize').value,investigator:$('investigatorStampSize').value}};
+  return {format:'volunteer-merit-studio',version:3,fields:Object.fromEntries(fieldIds.map(id=>[id,$(id).value])),records,groups,stamp,stampSizes:{recommender:$('recommenderStampSize').value,investigator:$('investigatorStampSize').value}};
 }
 function saveProject() {
   const content=JSON.stringify(projectData(),null,2);
@@ -684,15 +688,16 @@ $('jsonFile').addEventListener('change',async event=>{
     if (!supported) throw new Error('이 앱에서 저장한 작업파일이 아닙니다.');
     if (!confirm('현재 화면의 자료를 불러온 작업파일로 바꿀까요?')) return;
     fieldIds.forEach(id=>{if($(id))$(id).value=data.fields[id]??'';});
-    const legacyGroups=groupsToLoad.length<5;
-    records=data.records.map(record=>{
-      const oldCategory=Math.max(0,Math.min(legacyGroups?3:4,Number(record.cat)||0));
-      return {...record,cat:legacyGroups&&oldCategory===3?4:oldCategory};
-    });
-    groups=defaultCategories.map((title,index)=>{
-      const sourceIndex=legacyGroups?(index===4?3:index===3?-1:index):index;
-      return {...{title,detail:'',short:''},...(sourceIndex>=0?groupsToLoad[sourceIndex]||{}:{}),title};
-    });
+    records=data.records.map(record=>({...record,cat:Math.max(0,Number(record.cat)||0)}));
+    if (data.version>=3 && groupsToLoad.length>=1 && groupsToLoad.length<=MAX_GROUPS) {
+      groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:group.detail||'',short:group.short||''}));
+      records.forEach(record=>{record.cat=Math.min(groups.length-1,record.cat);});
+    } else {
+      // 과거 고정 5분야 작업파일은 실제 실적을 다시 분석하여 4개 이하로 구성한다.
+      autoGroupRecords();
+      if(records.length) draftText({announceResult:false});
+    }
+
     stamp=data.stamp||null;
     if(stamp){$('stampImage').src=stamp.dataUrl;$('stampName').textContent=stamp.name||'도장 이미지';$('stampPreview').hidden=false;}else{$('stampPreview').hidden=true;}
     $('recommenderStampSize').value=data.stampSizes?.recommender||22;$('investigatorStampSize').value=data.stampSizes?.investigator||22;
