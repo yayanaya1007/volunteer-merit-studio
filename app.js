@@ -380,6 +380,17 @@ $('regroup').addEventListener('click',()=>{
   announce(`실제 활동내용을 다시 분석해 ${groups.length}개 분야의 제목과 공적내용을 작성했습니다. 확인 후 필요한 부분만 수정하세요.`);
 });
 
+const FIXED_MATCHING = '공적내용은 제출된 봉사실적을 근거로 작성하였으며, 원본 및 증빙자료와 최종 대조하여 일치 여부를 확인함.';
+function fieldInvestigationDraft(rows) {
+  const count=rows.length;
+  const dates=rows.map(row=>row.date).filter(Boolean).sort();
+  const years=new Set(dates.map(date=>date.slice(0,4)));
+  const activities=[...new Set(rows.map(row=>clean(row.desc)).filter(Boolean))];
+  const duration=years.size>1?`${years.size}개 연도에 걸쳐`:'';
+  const character=`봉사실적상 ${duration} ${count}건의 자원봉사에 참여한 사실이 확인되며, 꾸준한 참여 태도를 보여줌. 도덕성 흠결 여부는 현지조사 확인 필요.`.replace(/\s+/g,' ').trim();
+  const reputation=`지역사회에서 ${activities.slice(0,2).join('·')||'자원봉사'} 등 ${count}건의 활동에 참여한 기록이 확인됨. 지역여론 및 공·사생활 평가는 현지조사 확인 필요.`;
+  return {character,reputation};
+}
 function draftText({announceResult=true}={}) {
   const included=selected();
   if (!included.length) { if (announceResult) announce('먼저 봉사실적을 가져오거나 직접 입력해 주세요.','error'); return false; }
@@ -402,9 +413,10 @@ function draftText({announceResult=true}={}) {
   const period=start&&end?`${start.replaceAll('-','.')}부터 ${end.replaceAll('-','.')}까지`:'확인된 공적 기간 동안';
   const hours=included.some(record=>record.hours>0)?` 총 ${included.reduce((sum,record)=>sum+Number(record.hours||0),0).toFixed(1)}시간`:' 봉사시간 확인 필요';
   $('intro').value=`상기인은 ${period} 승인 봉사실적 ${included.length}건${hours}에 참여하고, ${active.join(', ')} 분야에서 지역사회 발전과 자원봉사 활성화에 기여함.`;
-  $('character').value='제공된 실적에서 자원봉사 참여가 확인됨. 도덕성 흠결 여부는 현지조사 확인 필요.';
-  $('reputation').value='지역 주민 여론과 공·사생활은 제공된 실적으로 확인할 수 없어 현지조사 확인 필요.';
-  $('matching').value='승인 실적을 기준으로 초안을 작성함. 원본 실적과 증빙자료 대조 후 최종 확인 필요.';
+  const investigation=fieldInvestigationDraft(included);
+  $('character').value=investigation.character;
+  $('reputation').value=investigation.reputation;
+  $('matching').value=FIXED_MATCHING;
   updateCharacterCount();
   if (announceResult) announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동 횟수와 문구를 원자료·증빙과 대조해 수정하세요.');
   return true;
@@ -432,7 +444,10 @@ async function generateAIDraft({announceResult=true}={}) {
     if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string'||typeof result.character!=='string'||typeof result.reputation!=='string'||typeof result.matching!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
     groups=groups.map((group,index)=>({...group,detail:clean(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
-    $('character').value=clean(result.character);$('reputation').value=clean(result.reputation);$('matching').value=clean(result.matching);
+    const investigation=fieldInvestigationDraft(selected());
+    $('character').value=investigation.character;
+    $('reputation').value=investigation.reputation;
+    $('matching').value=FIXED_MATCHING;
     renderGroups(); updateCharacterCount();
     if (announceResult) announce('AI가 승인된 시간인증 실적만 바탕으로 초안을 만들었습니다. 문구와 실적을 증빙자료와 대조해 주세요.');
     return true;
@@ -481,7 +496,7 @@ function documentModel() {
   const active=groups.map((group,index)=>({...group,index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
-    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:val('matching'),period:periodText(),groups:active
+    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
 let previewObjectUrl='';
