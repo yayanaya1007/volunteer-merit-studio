@@ -12,3 +12,11 @@
 
 /* 모바일/공개 사이트에서의 문서 내용 확인 미리보기 */
 .mobile-preview-pages{display:flex;flex-direction:column;gap:16px}.mobile-preview-pages .doc-page{width:100%;max-width:794px;min-height:0;overflow-wrap:anywhere}.mobile-preview-pages .doc-page .doc-block{white-space:pre-wrap}.mobile-preview-pages .doc-page table{table-layout:fixed;width:100%}.mobile-preview-pages .doc-page th,.mobile-preview-pages .doc-page td{overflow-wrap:anywhere}.mobile-preview-pages .doc-page .doc-label{width:32%}@media(max-width:600px){.document-preview{overflow-x:hidden}.mobile-preview-pages .doc-page{padding:18px 12px;font-size:11px}.mobile-preview-pages .doc-page table{font-size:10px}.mobile-preview-pages .doc-page th,.mobile-preview-pages .doc-page td{padding:7px 5px}.mobile-preview-pages .doc-page h3{font-size:16px;letter-spacing:2px}.preview-actions #previewBtn{min-height:48px;font-size:14px}}
+
+/* Saved drafts visible on mobile and desktop */
+.saved-projects-section{margin:20px 0;padding:16px;border:1px solid var(--line,#d7dee7);border-radius:12px}
+.saved-projects-section h3{margin:0 0 6px}
+#savedProjectsList{display:grid;gap:8px;margin-top:12px}
+.saved-project-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid #e2e7ec;border-radius:8px}
+.saved-project-row>span{flex:1 1 210px;overflow-wrap:anywhere}
+@media(max-width:600px){.saved-projects-section{padding:12px}.saved-project-row .button{flex:1}}
