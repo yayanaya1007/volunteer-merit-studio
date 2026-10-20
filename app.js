@@ -313,7 +313,12 @@ async function importSingleWorkbook() {
     const valid=parsed.rows.filter(row=>row.approved && row.date && row.hours>0);
     const excluded=parsed.rows.length-valid.length;
     if (!valid.length) throw new Error('날짜·시간이 있는 승인 실적을 찾지 못했습니다.');
-    const filledPersonal=applyPersonalFields(parsed.personal);
+    // 1365 시간인증 원본은 이름이 표 내부에 없고 파일명에만 있는 경우가 많다.
+    // 명시적인 성명 셀을 우선하고, 없으면 파일명 첫 부분의 한글 이름을 사용한다.
+    const filenameName=timeAuthFile.name.match(/^\\s*([가-힣]{2,5})\\s*(?=\\(\\d+\\)|[_\\-\\s.]|$)/)?.[1]||'';
+    const personal={...parsed.personal};
+    if(!personal.name&&filenameName)personal.name=filenameName;
+    const filledPersonal=applyPersonalFields(personal);
     records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
     autoGroupRecords();
     lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded};
