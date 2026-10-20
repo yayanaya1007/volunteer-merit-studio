@@ -243,6 +243,11 @@ function extractPersonalFields(rows){
   }
   return found;
 }
+function nameFromWorkbookFilename(filename){
+  const basename=String(filename||'').split(/[\\/]/).pop().replace(/\.(?:xlsx|xls|csv)$/i,'').trim();
+  const match=basename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
+  return match?.[1]||'';
+}
 function applyPersonalFields(info){
   let filled=0;
   for(const [id,raw] of Object.entries(info||{})){
@@ -315,7 +320,7 @@ async function importSingleWorkbook() {
     if (!valid.length) throw new Error('날짜·시간이 있는 승인 실적을 찾지 못했습니다.');
     // 1365 시간인증 원본은 이름이 표 내부에 없고 파일명에만 있는 경우가 많다.
     // 명시적인 성명 셀을 우선하고, 없으면 파일명 첫 부분의 한글 이름을 사용한다.
-    const filenameName=timeAuthFile.name.match(/^\\s*([가-힣]{2,5})\\s*(?=\\(\\d+\\)|[_\\-\\s.]|$)/)?.[1]||'';
+    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
     const personal={...parsed.personal};
     if(!personal.name&&filenameName)personal.name=filenameName;
     const filledPersonal=applyPersonalFields(personal);
@@ -331,10 +336,10 @@ async function importSingleWorkbook() {
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if(false && timeAuthFile) {
-    const matched=timeAuthFile.name.match(/^([가-힣]{2,5})\s*(?:\(\d+\)|[_\-\s])/);
-    if(matched && (!val('name') || val('name')===lastAutoName)) {
-      $('name').value=matched[1]; lastAutoName=matched[1]; // 파일명에 이름이 있을 때만 채움
+  if(timeAuthFile){
+    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
+    if(filenameName&&(!val('name')||val('name')===lastAutoName)){
+      $('name').value=filenameName;lastAutoName=filenameName;
     }
   }
   $('applyWorkbook').disabled=!timeAuthFile;
