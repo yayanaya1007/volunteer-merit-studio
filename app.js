@@ -244,9 +244,13 @@ function extractPersonalFields(rows){
   return found;
 }
 function nameFromWorkbookFilename(filename){
-  const basename=String(filename||'').split(/[\\/]/).pop().replace(/\.(?:xlsx|xls|csv)$/i,'').trim();
-  const match=basename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
-  return match?.[1]||'';
+  // iOS 공유파일은 TalkFile_ 접두사와 분해된 한글 자모(NFD)가 함께 올 수 있다.
+  const basename=String(filename||'').normalize('NFC').split(/[\\/]/).pop()
+    .replace(/\.(?:xlsx|xls|csv)$/i,'').replace(/^(?:TalkFile[_\-\s]+)+/i,'').trim();
+  const numbered=basename.match(/(?:^|[_\-\s])([가-힣]{2,5})\s*\(\s*\d{4,}\s*\)/);
+  if(numbered)return numbered[1];
+  const leading=basename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
+  return leading?.[1]||'';
 }
 function applyPersonalFields(info){
   let filled=0;
