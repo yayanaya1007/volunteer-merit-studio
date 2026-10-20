@@ -26,7 +26,18 @@
     </section>
 
     <section class="card">
-      <div class="section-heading"><span class="section-number">01</span><div><h2>행사와 추천 대상자</h2><p>엑셀에 없는 인적사항만 보충하세요. 봉사기간과 시간은 자동 계산됩니다.</p></div></div>
+      <div class="section-heading"><span class="section-number">01</span><div><h2>원본 봉사실적 엑셀 하나 올리기</h2><p>1365에서 다운로드한 날짜·시간·봉사내용이 들어 있는 시간인증 엑셀파일 하나만 선택하세요. 승인 실적을 자동 추출하고 문서 초안까지 작성합니다.</p></div></div>
+      <div class="upload-row"><label class="file-picker">1365 원본 시간인증 엑셀 선택<input id="timeAuthUpload" type="file" accept=".xlsx,.xls,.csv"></label><span id="timeAuthFileName" class="hint">선택 안 됨</span><button id="addRow" class="button button-light">실적 직접 추가</button><button id="clearRows" class="button button-text">전체 비우기</button></div>
+      <div id="fileStatus" class="notice" role="status">원본 시간인증 엑셀 한 개를 선택하면 승인된 실적을 추리고 4개 분야 공적내용을 자동으로 작성합니다. 엑셀파일은 이 기기에서만 읽습니다.</div>
+      <div class="stats">
+        <div><span>포함 실적</span><b id="count">0건</b></div><div><span>봉사시간 합계</span><b id="hours">—</b></div><div><span>최초 활동일</span><b id="start">—</b></div><div><span>마지막 활동일</span><b id="end">—</b></div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>포함</th><th>일자</th><th>활동분야</th><th>봉사내용</th><th>시간</th><th>분류</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty-row">엑셀 또는 CSV 파일을 선택해 주세요.</td></tr></tbody></table></div>
+      <div class="upload-row upload-row-bottom"><button id="exportCSV" class="button button-light">분류 실적 CSV 저장</button><span id="importSummary" class="hint"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><span class="section-number">02</span><div><h2>행사와 추천 대상자</h2><p>엑셀에 없는 인적사항만 보충하세요. 봉사기간과 시간은 자동 계산됩니다.</p></div></div>
       <div class="form-grid">
         <label>행사연도<input id="year" type="number" value="2026" min="2000" max="2100"></label>
         <label>행사명<input id="event" value="자원봉사자 기념식"></label>
@@ -54,17 +65,6 @@
         <label class="span-2">주요 경력<textarea id="career" rows="2" placeholder="확인된 경력만 입력"></textarea></label>
         <label class="span-2">과거 표창기록<textarea id="history" rows="2" placeholder="확인된 표창기록만 입력"></textarea></label>
       </div>
-    </section>
-
-    <section class="card">
-      <div class="section-heading"><span class="section-number">02</span><div><h2>원본 봉사실적 엑셀 하나 올리기</h2><p>1365에서 다운로드한 날짜·시간·봉사내용이 들어 있는 시간인증 엑셀파일 하나만 선택하세요. 승인 실적을 자동 추출하고 문서 초안까지 작성합니다.</p></div></div>
-      <div class="upload-row"><label class="file-picker">1365 원본 시간인증 엑셀 선택<input id="timeAuthUpload" type="file" accept=".xlsx,.xls,.csv"></label><span id="timeAuthFileName" class="hint">선택 안 됨</span><button id="addRow" class="button button-light">실적 직접 추가</button><button id="clearRows" class="button button-text">전체 비우기</button></div>
-      <div id="fileStatus" class="notice" role="status">원본 시간인증 엑셀 한 개를 선택하면 승인된 실적을 추리고 4개 분야 공적내용을 자동으로 작성합니다. 엑셀파일은 이 기기에서만 읽습니다.</div>
-      <div class="stats">
-        <div><span>포함 실적</span><b id="count">0건</b></div><div><span>봉사시간 합계</span><b id="hours">—</b></div><div><span>최초 활동일</span><b id="start">—</b></div><div><span>마지막 활동일</span><b id="end">—</b></div>
-      </div>
-      <div class="table-wrap"><table><thead><tr><th>포함</th><th>일자</th><th>활동분야</th><th>봉사내용</th><th>시간</th><th>분류</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty-row">엑셀 또는 CSV 파일을 선택해 주세요.</td></tr></tbody></table></div>
-      <div class="upload-row upload-row-bottom"><button id="exportCSV" class="button button-light">분류 실적 CSV 저장</button><span id="importSummary" class="hint"></span></div>
     </section>
 
     <section class="card">
