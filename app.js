@@ -5,6 +5,7 @@ let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
 let timeAuthFile = null;
+let lastAutoName = '';
 let lastImport = {files:0, imported:0, duplicates:0, rejected:0};
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -253,6 +254,9 @@ function mergeRecords(incoming) {
 
 async function importSingleWorkbook() {
   if (!timeAuthFile) { announce('날짜·시간·봉사내용이 있는 1365 원본 엑셀을 선택해 주세요.'); return; }
+  records=[];groups=[];
+  ['gist','intro','character','reputation','matching'].forEach(id=>$(id).value='');
+  renderRows();renderGroups();updateCharacterCount();
   announce('원본 엑셀에서 날짜, 시간, 봉사내용과 승인 상태를 분석하고 있습니다…');
   try {
     const parsed=await parseWorkbook(timeAuthFile);
@@ -273,9 +277,11 @@ async function importSingleWorkbook() {
 $('timeAuthUpload').addEventListener('change',event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if(timeAuthFile && !val('name')) {
+  if(timeAuthFile) {
     const matched=timeAuthFile.name.match(/^([가-힣]{2,5})\s*(?:\(\d+\)|[_\-\s])/);
-    if(matched) $('name').value=matched[1]; // 1365 파일명에 이름이 있을 때만 채움
+    if(matched && (!val('name') || val('name')===lastAutoName)) {
+      $('name').value=matched[1]; lastAutoName=matched[1]; // 파일명에 이름이 있을 때만 채움
+    }
   }
   if(timeAuthFile) importSingleWorkbook();
 });
@@ -332,7 +338,7 @@ $('addRow').addEventListener('click',()=>{
 $('clearRows').addEventListener('click',()=>{
   if (!records.length && !timeAuthFile) return;
   if (!confirm('가져오거나 직접 입력한 실적을 모두 지울까요?')) return;
-  records=[]; groups=[]; timeAuthFile=null;
+  records=[]; groups=[]; timeAuthFile=null; lastAutoName='';
   $('timeAuthUpload').value='';
   $('timeAuthFileName').textContent='선택 안 됨';
   ['gist','intro','character','reputation','matching'].forEach(id=>$(id).value=''); updateCharacterCount();
