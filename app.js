@@ -466,8 +466,8 @@ function fieldInvestigationDraft(rows) {
   const count=rows.length;
   const period=dates.length>1 && dates[0].slice(0,4)!==dates.at(-1).slice(0,4)?'오랜 기간 ': '';
   return {
-    character:`평소 ${period}자원봉사활동에 꾸준히 참여하며 성실한 봉사 자세를 보여줌. 도덕성 관련 특이사항은 현지조사 확인 필요.`,
-    reputation:`지역사회에서 ${count}건의 봉사활동에 참여하며 나눔을 실천한 실적이 확인됨. 주민 신망 및 공·사생활 평가는 현지조사 확인 필요.`
+    character:`평소 ${period}자원봉사활동에 꾸준히 참여하며 성실한 봉사 자세를 보여줌. `,
+    reputation:`지역사회에서 ${count}건의 봉사활동에 참여하며 나눔을 실천한 실적이 확인됨. `
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
@@ -784,7 +784,7 @@ function createHwpxXml(model) {
   ];
   const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 경력',model.career||'미입력','과거 표창기록',model.history||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,group.detail||'해당 실적 없음 · 내용 확인 필요'])];
   const p3=[{text:'공 적 개 요 서',heading:true},`소속: ${model.org}    직급·직책: ${model.rank}`,`성명: ${model.name}    공적기간: ${model.period}`,'공적 개요',...model.groups.flatMap(group=>[`○ ${group.title}`,group.short||'해당 실적 없음 · 내용 확인 필요'])];
-  const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||'현지조사 후 확인 필요','지역여론 (공·사생활 등)',model.reputation||'현지조사 후 확인 필요','공적사항 (공적내용과 일치 여부)',model.matching||'검증 후 작성','',model.docDate,`현지조사자  소속: ${model.org}  직위: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
+  const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||'—','지역여론 (공·사생활 등)',model.reputation||'—','공적사항 (공적내용과 일치 여부)',model.matching||'검증 후 작성','',model.docDate,`현지조사자  소속: ${model.org}  직위: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
   const sections=[pageSection(p1,0),pageSection(p2,100,true),pageSection(p3,200,true),pageSection(p4,300,true)].join('');
   const sectionXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hs:sec xmlns:hs="${HWP_NS.hs}" xmlns:hp="${HWP_NS.hp}" xmlns:hc="${HWP_NS.hc}" xmlns:hh="${HWP_NS.hh}" version="1.2">${sections}</hs:sec>`;
   const stampPath=stamp?.type==='image/jpeg'?'stamp.jpg':'stamp.png';
