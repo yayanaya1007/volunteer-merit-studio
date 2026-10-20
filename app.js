@@ -335,6 +335,8 @@ async function importSingleWorkbook() {
     $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
     renderRows();renderReferences();
     draftText({announceResult:false});
+    const aiReady=isLocalAI||Boolean(publicAIUrl&&sessionStorage.getItem('merit-ai-access-code'));
+    const aiUsed=aiReady?await generateAIDraft({announceResult:false}):false;
     announce(`원본 엑셀 한 개에서 ${records.length}건, 총 ${records.reduce((sum,row)=>sum+row.hours,0).toFixed(1)}시간을 확인했습니다. 실제 활동에 맞는 ${groups.length}개 분야와 공적조서 초안을 자동 작성했습니다.`);
   } catch(error) { announce(error.message||'원본 엑셀을 읽지 못했습니다.','error'); }
 }
@@ -499,8 +501,8 @@ function activityTokens(value){
 function summarizedActivities(rows,maxItems=3){
   const clusters=[];
   for(const row of rows){
-    const label=compactActivity(row.desc||row.area);
-    if(!label)continue;
+    const label=compactActivity(row.desc);
+    if(!label || label.replace(/\s/g,'')===clean(row.area).replace(/\s/g,''))continue;
     const tokens=activityTokens(label);
     let target=clusters.find(cluster=>{
       const shared=tokens.filter(token=>cluster.tokens.includes(token));
@@ -537,7 +539,7 @@ function draftText({announceResult=true}={}) {
     const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
     // 분야별 1~2개의 핵심 내용만 짧게 작성하고 같은 기여 문구를 반복하지 않는다.
     group.detail=concise.map(item=>'• '+item).join('\n');
-    group.short=concise.slice(0,2).join(' 및 ')+(concise.length?' 참여':'');
+    group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
 
   });
   renderGroups();
