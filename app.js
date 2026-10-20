@@ -533,10 +533,12 @@ function draftText({announceResult=true}={}) {
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     if(!rows.length){group.detail='';group.short='';return;}
-    const summary=summarizedActivities(rows,3);
-    const contribution=contributionFor(rows,group.title);
-    group.detail=summary.map(phrase=>`• ${phrase} 활동을 통해 ${contribution}에 기여함.`).join('\n');
-    group.short=`${summary.slice(0,2).join(' 및 ')||group.title} 활동을 통해 ${contribution}에 기여함.`;
+    const summary=summarizedActivities(rows,2).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
+    const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
+    // 분야별 1~2개의 핵심 내용만 짧게 작성하고 같은 기여 문구를 반복하지 않는다.
+    group.detail=concise.map(item=>'• '+item).join('\n');
+    group.short=concise.slice(0,2).join(' 및 ')+(concise.length?' 참여':'');
+
   });
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
@@ -544,7 +546,7 @@ function draftText({announceResult=true}={}) {
   const {start,end}=periodRange();
   const period=start&&end?`${start.slice(0,4)}년부터 ${end.slice(0,4)}년까지`:'확인된 공적기간 동안';
   const totalHours=included.reduce((sum,record)=>sum+Number(record.hours||0),0);
-  $('intro').value=`상기인은 ${period} 지역사회를 위한 자원봉사활동 ${included.length}회, 총 ${readableHours(totalHours)}에 꾸준히 참여한 자로, ${active.join(', ')} 활동을 실천하여 지역사회 발전과 자원봉사 활성화에 기여한 공적이 큼.`;
+  $('intro').value=`상기인은 ${period} ${active.slice(0,3).join('·')} 등 자원봉사활동에 성실히 참여하여 지역사회 발전에 기여한 사람임.`;
   const investigation=fieldInvestigationDraft(included);
   $('character').value=investigation.character;
   $('reputation').value=investigation.reputation;
