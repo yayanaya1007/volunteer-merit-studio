@@ -1,12 +1,13 @@
 const $ = (id) => document.getElementById(id);
 const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','education','career','history','gist','intro','character','reputation','matching'];
-const MAX_GROUPS = 4;
+const MAX_GROUPS = 5;
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
 let timeAuthFile = null;
 let lastAutoName = '';
 let lastImport = {files:0, imported:0, duplicates:0, rejected:0};
+let personalAPIKey = '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
@@ -26,7 +27,11 @@ function announceExport(message, tone='info') {
 const isLocalAI = ['127.0.0.1','localhost'].includes(location.hostname);
 const publicAIUrl = String(window.MERIT_API_URL || '').replace(/\/$/, '');
 if (isLocalAI) {
-  $('aiAccessCode').closest('.ai-access-row').hidden = true;
+  $('aiMode').closest('.ai-access-row').hidden = true;
+  $('sharedAIControls').hidden = true;
+  $('personalAIControls').hidden = true;
+  $('personalAIPrivacy').hidden = true;
+  $('personalAIHelp').hidden = true;
   $('aiConnectionStatus').textContent = '이 PC의 로컬 AI 서버를 사용합니다.';
 } else if (!publicAIUrl) {
   $('aiConnectionStatus').textContent = '공개 AI 서버가 아직 연결되지 않았습니다.';
@@ -34,6 +39,28 @@ if (isLocalAI) {
 if (sessionStorage.getItem('merit-ai-access-code')) {
   $('aiConnectionStatus').textContent = '이 기기에서 연결됨';
 }
+$('aiMode').addEventListener('change', () => {
+  const usePersonalKey = $('aiMode').value === 'personal';
+  $('sharedAIControls').hidden = usePersonalKey;
+  $('personalAIControls').hidden = !usePersonalKey;
+  $('personalAIPrivacy').hidden = !usePersonalKey;
+  if (usePersonalKey) $('personalAPIKeyInput').focus();
+});
+$('usePersonalAPIKey').addEventListener('click', () => {
+  const candidate = $('personalAPIKeyInput').value.trim();
+  if (!candidate) { $('personalAIStatus').textContent = '복사한 API 키를 먼저 붙여 넣어 주세요.'; $('personalAPIKeyInput').focus(); return; }
+  if (!/^sk-[A-Za-z0-9_-]{16,500}$/.test(candidate)) { $('personalAIStatus').textContent = '키 형식을 확인해 주세요. OpenAI API 키를 다시 복사해 붙여 넣어 주세요.'; return; }
+  personalAPIKey = candidate;
+  $('personalAPIKeyInput').value = '';
+  $('personalAIStatus').textContent = '사용 준비됨 · 이 탭에만 임시 보관 중';
+  $('clearPersonalAPIKey').hidden = false;
+});
+$('clearPersonalAPIKey').addEventListener('click', () => {
+  personalAPIKey = '';
+  $('personalAPIKeyInput').value = '';
+  $('personalAIStatus').textContent = '키를 지웠습니다. 다시 사용하려면 키를 입력해 주세요.';
+  $('clearPersonalAPIKey').hidden = true;
+});
 $('connectAI').addEventListener('click', async () => {
   if (!publicAIUrl) { $('aiConnectionStatus').textContent = '서버 배포가 끝나면 연결할 수 있습니다.'; return; }
   const code = clean($('aiAccessCode').value);
@@ -81,7 +108,7 @@ function hoursValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-// 내부 분석 단서는 여러 활동 유형을 포괄하지만, 화면에 고정된 4개 분야는 없다.
+// 내부 분석 단서는 여러 활동 유형을 포괄하지만, 화면에 고정된 분야는 없다.
 // 제목은 각 봉사자의 엑셀에 실제로 기재된 '활동분야'와 '봉사내용'에서 도출한다.
 const themeCues = [
   {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환']},
@@ -335,8 +362,6 @@ async function importSingleWorkbook() {
     $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
     renderRows();renderReferences();
     draftText({announceResult:false});
-    const aiReady=isLocalAI||Boolean(publicAIUrl&&sessionStorage.getItem('merit-ai-access-code'));
-    const aiUsed=aiReady?await generateAIDraft({announceResult:false}):false;
     announce(`원본 엑셀 한 개에서 ${records.length}건, 총 ${records.reduce((sum,row)=>sum+row.hours,0).toFixed(1)}시간을 확인했습니다. 실제 활동에 맞는 ${groups.length}개 분야와 공적조서 초안을 자동 작성했습니다.`);
   } catch(error) { announce(error.message||'원본 엑셀을 읽지 못했습니다.','error'); }
 }
@@ -464,12 +489,10 @@ $('regroup').addEventListener('click',()=>{
 
 const FIXED_MATCHING = '공적내용은 제출된 봉사실적을 근거로 작성하였으며, 원본 및 증빙자료와 최종 대조하여 일치 여부를 확인함.';
 function fieldInvestigationDraft(rows) {
-  const dates=rows.map(row=>row.date).filter(Boolean).sort();
   const count=rows.length;
-  const period=dates.length>1 && dates[0].slice(0,4)!==dates.at(-1).slice(0,4)?'오랜 기간 ': '';
   return {
-    character:`평소 ${period}자원봉사활동에 꾸준히 참여하며 성실한 봉사 자세를 보여줌. `,
-    reputation:`지역사회에서 ${count}건의 봉사활동에 참여하며 나눔을 실천한 실적이 확인됨. `
+    character:`제출된 봉사실적 ${count}건이 확인됨. 품성과 도덕성은 현지조사 자료로 확인 필요.`,
+    reputation:'주민 여론과 사생활은 제출된 봉사실적만으로 확인할 수 없어 현지조사 확인 필요.'
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
@@ -573,14 +596,21 @@ async function generateAIDraft({announceResult=true}={}) {
     if (announceResult) announce('공개 AI 서버가 아직 연결되지 않았습니다. 기본 초안은 계속 AI 없이 사용할 수 있습니다.','error');
     return false;
   }
-  const accessCode = local ? '' : sessionStorage.getItem('merit-ai-access-code');
-  if (!local && !accessCode) {
+  const personalMode = !local && $('aiMode').value === 'personal';
+  const personalKey = personalMode ? personalAPIKey : '';
+  const accessCode = local || personalMode ? '' : sessionStorage.getItem('merit-ai-access-code');
+  if (!local && personalMode && !personalKey) {
+    if (announceResult) announce('먼저 API 키 사용방법에 따라 내 OpenAI API 키를 입력해 주세요.','error');
+    $('personalAPIKeyInput').focus();
+    return false;
+  }
+  if (!local && !personalMode && !accessCode) {
     if (announceResult) announce('먼저 AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error');
     $('aiAccessCode').focus();
     return false;
   }
   try {
-    const response=await fetch(`${local?'':publicAIUrl}/api/draft`,{method:'POST',headers:{'Content-Type':'application/json',...(accessCode?{'Authorization':`Bearer ${accessCode}`}:{})},body:JSON.stringify({categories:groups.map(group=>group.title),records:selected().map(record=>({area:record.area,desc:record.desc,date:record.date,hours:record.hours,category:groups[record.cat]?.title||groups[0].title}))})});
+    const response=await fetch(`${local?'':publicAIUrl}/api/draft`,{method:'POST',headers:{'Content-Type':'application/json',...(accessCode?{'Authorization':`Bearer ${accessCode}`}:{}) ,...(personalKey?{'X-OpenAI-API-Key':personalKey}:{})},body:JSON.stringify({categories:groups.map(group=>group.title),records:selected().map(record=>({area:record.area,desc:record.desc,date:record.date,hours:record.hours,category:groups[record.cat]?.title||groups[0].title}))})});
     const rawBody=await response.text();
     let resultBody;
     try { resultBody=JSON.parse(rawBody); } catch { resultBody={error:rawBody}; }
@@ -604,7 +634,8 @@ async function generateAIDraft({announceResult=true}={}) {
 $('draft').addEventListener('click',async()=>{
   if (!selected().length) { announce('먼저 1365 원본 엑셀 하나를 선택해 주세요.','error'); return; }
   if (!isLocalAI && !publicAIUrl) { announce('공개 AI 서버 연결이 아직 준비 중입니다. 기본 초안은 AI 없이 사용할 수 있습니다.','error'); return; }
-  if (!isLocalAI && !sessionStorage.getItem('merit-ai-access-code')) { announce('AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error'); $('aiAccessCode').focus(); return; }
+  if (!isLocalAI && $('aiMode').value==='personal' && !personalAPIKey) { announce('API 키 사용방법을 열고 내 OpenAI API 키를 입력한 뒤 다시 눌러 주세요.','error'); $('personalAPIKeyInput').focus(); return; }
+  if (!isLocalAI && $('aiMode').value==='shared' && !sessionStorage.getItem('merit-ai-access-code')) { announce('AI 접근 코드를 입력하고 이 기기에서 연결해 주세요.','error'); $('aiAccessCode').focus(); return; }
   const aiUsed=await generateAIDraft({announceResult:false});
   if (!aiUsed) draftText({announceResult:false});
   announce(aiUsed?'AI가 근거 실적만 바탕으로 문장을 작성했습니다. 사실과 다른 내용이 없는지 원자료와 대조해 주세요.':'AI 서버를 사용할 수 없습니다. 엑셀 읽기와 기본 초안은 계속 AI 없이 사용할 수 있습니다.','error');
@@ -646,13 +677,16 @@ function documentModel() {
 }
 function renderMobilePreview(){
   const model=documentModel();
-  const safe=value=>esc(String(value??''));
+  const safe=value=>esc(String(value??'')).replace(/\n/g,'<br>');
+  const ageAt=(birth,date)=>{const match=String(birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const target=new Date(`${date}T00:00:00`);let age=target.getFullYear()-year;if(target<new Date(target.getFullYear(),Number(match[2])-1,Number(match[3])))age--;return Math.max(0,age);};
   const row=(label,value)=>`<tr><th class="doc-label">${safe(label)}</th><td>${safe(value||'')}</td></tr>`;
   const groups=model.groups||[];
   const pages=[
-    `<section class="doc-page"><h3>공 적 조 서</h3><table>${row('성 명',model.name)}${row('소 속',model.org)}${row('직 급 · 직 책',[model.rank,model.position].filter(Boolean).join(' / '))}${row('공 적 기 간',model.period)}${row('공 적 요 지',model.gist)}</table><h4>주요 공적사항</h4><div class="doc-block">${safe(model.intro)}</div>${groups.map(g=>`<h4>${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
-    `<section class="doc-page"><h3>공 적 개 요 서</h3><table>${row('성 명',model.name)}${row('소 속',model.org)}${row('공 적 기 간',model.period)}</table><h4>공적 개요</h4>${groups.map(g=>`<h4>${safe(g.title)}</h4><div class="doc-block">${safe(g.short)}</div>`).join('')}</section>`,
-    `<section class="doc-page"><h3>현 지 조 사 확 인 서</h3><table>${row('성 명',model.name)}${row('품 성',model.character)}${row('지 역 여 론',model.reputation)}${row('공적사항 일치 여부',model.matching)}</table></section>`
+    `<section class="doc-page"><h3>공 적 조 서</h3><table>${row('성 명',model.name)}${row('한 자',model.hanja)}${row('생년월일 · 성별',`${model.birth} · ${model.gender}`)}${row('군번 · 국적',`${model.serviceNo} · ${model.nationality}`)}${row('주소 · 연락처',`${model.address} · ${model.phone}`)}${row('직업 · 소속',`${model.job} · ${model.org}`)}${row('직급 · 직위',`${model.rank} · ${model.position}`)}${row('공적기간 · 분야',`${model.period} · ${model.meritField}`)}${row('공적요지',model.gist)}${row('추천훈격 · 순위',`${model.award} · ${model.order}`)}${row('조사자',`${model.investigatorOrg} · ${model.investigatorRank} · ${model.investigator}`)}${row('추천관',model.recommender)}</table><p>${safe(model.docDate)}</p></section>`,
+    `<section class="doc-page"><h3>주요 학력 및 경력</h3><table>${row('주요 학력',model.education)}${row('주요 경력',model.career)}${row('과거 표창기록',model.history)}</table><h3>공 적 사 항</h3><div class="doc-block">${safe(model.intro)}</div>${groups.slice(0,3).map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
+    `<section class="doc-page"><h3>공 적 사 항 (계속)</h3>${groups.slice(3).map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
+    `<section class="doc-page"><h3>공 적 개 요 서</h3><table>${row('소속',model.org)}${row('직급',model.rank)}${row('성명 · 연령',`${model.name} · ${model.birth?ageAt(model.birth,model.docDate):''}`)}${row('공적기간',model.period)}</table>${groups.map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.short)}</div>`).join('')}</section>`,
+    `<section class="doc-page"><h3>현지조사 확인서</h3><h4>인적사항</h4><table>${row('소속 · 직급',`${model.org} · ${model.rank}`)}${row('성명 · 생년월일',`${model.name} · ${model.birth} (${model.gender})`)}${row('한자',model.hanja)}</table><h4>현지조사 확인내용</h4><table>${row('품성',model.character)}${row('지역여론',model.reputation)}${row('공적사항 일치 여부',model.matching)}</table><p>${safe(model.docDate)}</p><p>${safe(model.investigatorOrg)} · ${safe(model.investigatorRank)} · ${safe(model.investigator)}</p></section>`
   ];
   $('documentPreview').innerHTML=`<div class="mobile-preview-pages">${pages.join('')}</div>`;
   $('documentPreview').hidden=false;
@@ -663,7 +697,7 @@ $('previewBtn').addEventListener('click',async()=>{
   const status=$('exportStatus'),button=$('previewBtn');
   if(!['localhost','127.0.0.1'].includes(location.hostname)){
     renderMobilePreview();
-    status.textContent='모바일·웹용 내용 확인 미리보기입니다. 실제 한글 문서의 글꼴·셀 크기·줄바꿈과는 차이가 있을 수 있습니다. 원본 양식 확인은 저장한 HWPX를 한글에서 열어 확인하세요.';
+    status.textContent='입력 내용 전체를 5쪽 구성으로 보여주는 웹 미리보기입니다. 저장되는 HWPX에는 업로드한 원본 한글 서식의 칸·선·글꼴 배치가 적용됩니다.';
     status.classList.add('notice-caution');return;
   }
   button.disabled=true;button.textContent='한글 서식으로 렌더링 중…';
@@ -726,7 +760,16 @@ function changeParagraphRange(nodes, start, end, replacement) {
 }
 function replaceTemplateText(doc, search, replacement, exactOnly=false) {
   for (const paragraph of doc.getElementsByTagNameNS(HWP_NS.hp,'p')) {
-    const nodes=Array.from(paragraph.getElementsByTagNameNS(HWP_NS.hp,'t'));
+    const nodes=[];
+    const collectOwnText=node=>{
+      for(const child of node.childNodes){
+        if(child.nodeType!==1)continue;
+        if(child.namespaceURI===HWP_NS.hp&&child.localName==='p')continue;
+        if(child.namespaceURI===HWP_NS.hp&&child.localName==='t')nodes.push(child);
+        else collectOwnText(child);
+      }
+    };
+    collectOwnText(paragraph);
     const joined=nodes.map(node=>node.textContent||'').join('');
     if(exactOnly){if(joined===search)changeParagraphRange(nodes,0,joined.length,cleanTemplateValue(replacement));continue;}
     const index=joined.indexOf(search);
@@ -742,42 +785,29 @@ async function createTemplateHwpx(model) {
   const xml=await entry.async('string');
   const doc=new DOMParser().parseFromString(xml,'application/xml');
   if(doc.querySelector('parsererror'))throw new Error('원본 한글 서식을 읽지 못했습니다.');
+  const marker=id=>String.fromCharCode(0xE000+id);
+  const documentDate=new Date(`${model.docDate}T00:00:00`);
+  const dateKor=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
+  const age=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const born=new Date(year,Number(match[2])-1,Number(match[3]));let value=documentDate.getFullYear()-year;if(documentDate<new Date(documentDate.getFullYear(),born.getMonth(),born.getDate()))value--;return String(Math.max(0,value));})();
   const values={
-    '{{name}}':model.name,'{{hanja}}':model.hanja,'{{birth}}':model.birth,'{{address}}':model.address,'{{phone}}':model.phone,
-    '{{serviceNo}}':model.serviceNo,'{{nationality}}':model.nationality,'{{meritField}}':model.meritField,'{{award}}':model.award,'{{order}}':model.order,
-    '{{org}}':model.org,'{{rank}}':model.rank,'{{position}}':model.position,'{{gist}}':model.gist||model.intro,'{{period}}':model.period,
-    '{{education}}':model.education,'{{career}}':model.career,'{{history}}':model.history,
-    '{{investigatorRank}}':model.investigatorRank,'{{investigator}}':model.investigator,'{{docDateKor}}':model.docDate,
-    '{{recommender}}':model.recommender,'{{gender}}':model.gender,'{{character}}':model.character,'{{reputation}}':model.reputation,'{{matching}}':model.matching,
-    '{{overview}}':model.groups.map(group=>`○ ${group.title}  - ${group.short||'해당 분야 실적 없음'}`).join('   ')
+    [marker(0)]:model.name,[marker(1)]:model.hanja,[marker(2)]:model.birth,[marker(3)]:model.gender,[marker(4)]:age,
+    [marker(5)]:model.serviceNo,[marker(6)]:model.nationality,[marker(7)]:model.address,[marker(8)]:model.phone,[marker(9)]:model.job,
+    [marker(10)]:model.org,[marker(11)]:model.rank,[marker(12)]:model.position,[marker(13)]:model.period,[marker(14)]:model.meritField,
+    [marker(15)]:model.gist||model.intro,[marker(16)]:model.award,[marker(17)]:model.order,[marker(18)]:model.investigatorRank,
+    [marker(19)]:model.investigator,[marker(20)]:model.recommender,[marker(21)]:dateKor,[marker(22)]:'',[marker(23)]:model.education,
+    [marker(24)]:'',[marker(25)]:model.career,[marker(26)]:model.org,[marker(27)]:model.history,[marker(28)]:model.intro,
+    [marker(29)]:model.character,[marker(30)]:model.reputation,[marker(31)]:model.matching,[marker(32)]:model.investigatorOrg
   };
   for(let index=0;index<5;index++){
     const group=model.groups[index];
-    values[`{{g${index}title}}`]=group?.title||'';
-    values[`{{g${index}detail}}`]=group?.detail||'';
-    values[`{{g${index}short}}`]=group?.short||'';
+    values[marker(33+index)]=group?.title||'';
+    values[marker(38+index)]=group?.detail||'';
+    values[marker(43+index)]=group?.short||'';
   }
-  const documentDate=new Date(`${model.docDate}T00:00:00`);
-  values['{{docDateKor}}']=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
-  const fallbackAge=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;return String(Math.max(0,new Date(model.docDate).getFullYear()-year));})();
-  const staticReplacements=[
-    ['지역 문화관광축제 운영 지원을 위한 자원봉사활동에 참여하여 방문객 안내',model.groups[0]?.detail||''],
-    ['특히 육군훈련소 입영문화제, 육군병장문화예술제, 연무읍 승격 60주년 음악회',''],
-    ['등 각종 지역행사에 참여하여 원활한 행사 운영에 기여함.',''],
-    ['설맞이 어르신 떡국, 사랑의 빵 나눔, 어버이날 카네이션 달아드리기 등',model.groups[1]?.detail||''],
-    ['{{g4title}} 활동에 참여하여 지역사회 발전에 기여함.',''],
-    ['마을담당제 안전점검, 소방시설 점검',model.groups[0]?.short||''],['취약가구 순찰 및 화재예방 활동',''],
-    ['집중호우 피해 농가 복구와 코로나19',model.groups[1]?.short||''],['방역·소독 활동',''],
-    ['환경정화 및 투명페트병 분리배출 활동을',model.groups[2]?.short||''],['통해 쾌적한 환경 조성',''],
-    ['각종 지역행사에 방문객 편의 지원 및',model.groups[3]?.short||''],['행사장 안전관리 활동',''],
-    ['어르신 나눔 활동, 카네이션 전달 및',''],['취약가구 생활안전 지원',''],
-    ['투철한 모범적인 시민임.',''],['신뢰와 존경을 받고 있으며',''],['평가받고 있음.',''],['55세',fallbackAge?`${fallbackAge}세`:'']
-  ];
-  for(const [search,value] of staticReplacements)replaceTemplateText(doc,search,cleanTemplateValue(value));
   for(const [token,value] of Object.entries(values))replaceTemplateText(doc,token,cleanTemplateValue(value));
   zip.file('Contents/section0.xml',new XMLSerializer().serializeToString(doc));
   const preview=zip.file('Preview/PrvText.txt');
-  if(preview){let text=await preview.async('string');for(const [token,value] of Object.entries(values))text=text.split(token).join(cleanTemplateValue(value));for(const [search,value] of staticReplacements)text=text.split(search).join(cleanTemplateValue(value));zip.file('Preview/PrvText.txt',text);}
+  if(preview)zip.file('Preview/PrvText.txt','공적조서 양식');
   const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
   return new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
 }
