@@ -26,6 +26,7 @@ function announceExport(message, tone='info') {
 }
 const isLocalAI = ['127.0.0.1','localhost'].includes(location.hostname);
 const publicAIUrl = String(window.MERIT_API_URL || '').replace(/\/$/, '');
+const nativeDocumentApiUrl = 'http://127.0.0.1:8769';
 if (isLocalAI) {
   $('aiMode').closest('.ai-access-row').hidden = true;
   $('sharedAIControls').hidden = true;
@@ -675,34 +676,14 @@ function documentModel() {
     year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
-function renderMobilePreview(){
-  const model=documentModel();
-  const safe=value=>esc(String(value??'')).replace(/\n/g,'<br>');
-  const ageAt=(birth,date)=>{const match=String(birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const target=new Date(`${date}T00:00:00`);let age=target.getFullYear()-year;if(target<new Date(target.getFullYear(),Number(match[2])-1,Number(match[3])))age--;return Math.max(0,age);};
-  const row=(label,value)=>`<tr><th class="doc-label">${safe(label)}</th><td>${safe(value||'')}</td></tr>`;
-  const groups=model.groups||[];
-  const pages=[
-    `<section class="doc-page"><h3>공 적 조 서</h3><table>${row('성 명',model.name)}${row('한 자',model.hanja)}${row('생년월일 · 성별',`${model.birth} · ${model.gender}`)}${row('군번 · 국적',`${model.serviceNo} · ${model.nationality}`)}${row('주소 · 연락처',`${model.address} · ${model.phone}`)}${row('직업 · 소속',`${model.job} · ${model.org}`)}${row('직급 · 직위',`${model.rank} · ${model.position}`)}${row('공적기간 · 분야',`${model.period} · ${model.meritField}`)}${row('공적요지',model.gist)}${row('추천훈격 · 순위',`${model.award} · ${model.order}`)}${row('조사자',`${model.investigatorOrg} · ${model.investigatorRank} · ${model.investigator}`)}${row('추천관',model.recommender)}</table><p>${safe(model.docDate)}</p></section>`,
-    `<section class="doc-page"><h3>주요 학력 및 경력</h3><table>${row('주요 학력',model.education)}${row('주요 경력',model.career)}${row('과거 표창기록',model.history)}</table><h3>공 적 사 항</h3><div class="doc-block">${safe(model.intro)}</div>${groups.slice(0,3).map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
-    `<section class="doc-page"><h3>공 적 사 항 (계속)</h3>${groups.slice(3).map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.detail)}</div>`).join('')}</section>`,
-    `<section class="doc-page"><h3>공 적 개 요 서</h3><table>${row('소속',model.org)}${row('직급',model.rank)}${row('성명 · 연령',`${model.name} · ${model.birth?ageAt(model.birth,model.docDate):''}`)}${row('공적기간',model.period)}</table>${groups.map(g=>`<h4>○ ${safe(g.title)}</h4><div class="doc-block">${safe(g.short)}</div>`).join('')}</section>`,
-    `<section class="doc-page"><h3>현지조사 확인서</h3><h4>인적사항</h4><table>${row('소속 · 직급',`${model.org} · ${model.rank}`)}${row('성명 · 생년월일',`${model.name} · ${model.birth} (${model.gender})`)}${row('한자',model.hanja)}</table><h4>현지조사 확인내용</h4><table>${row('품성',model.character)}${row('지역여론',model.reputation)}${row('공적사항 일치 여부',model.matching)}</table><p>${safe(model.docDate)}</p><p>${safe(model.investigatorOrg)} · ${safe(model.investigatorRank)} · ${safe(model.investigator)}</p></section>`
-  ];
-  $('documentPreview').innerHTML=`<div class="mobile-preview-pages">${pages.join('')}</div>`;
-  $('documentPreview').hidden=false;
-  $('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
-}
 let previewObjectUrl='';
 $('previewBtn').addEventListener('click',async()=>{
   const status=$('exportStatus'),button=$('previewBtn');
-  if(!['localhost','127.0.0.1'].includes(location.hostname)){
-    renderMobilePreview();
-    status.textContent='입력 내용 전체를 5쪽 구성으로 보여주는 웹 미리보기입니다. 저장되는 HWPX에는 업로드한 원본 한글 서식의 칸·선·글꼴 배치가 적용됩니다.';
-    status.classList.add('notice-caution');return;
-  }
+  const localPage=['localhost','127.0.0.1'].includes(location.hostname);
+  const previewUrl=`${nativeDocumentApiUrl}/api/preview`;
   button.disabled=true;button.textContent='한글 서식으로 렌더링 중…';
   try{
-    const response=await fetch('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:documentModel()})});
+    const response=await fetch(previewUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:documentModel()})});
     if(!response.ok)throw new Error(await response.text()||`미리보기 생성 오류 (${response.status})`);
     const blob=await response.blob();
     if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
@@ -710,7 +691,12 @@ $('previewBtn').addEventListener('click',async()=>{
     $('documentPreview').innerHTML=`<iframe title="원본 한글 서식 미리보기" src="${previewObjectUrl}"></iframe>`;
     $('documentPreview').hidden=false;$('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
     status.textContent='원본 한글 문서를 PDF로 렌더링한 미리보기입니다. 표·글꼴·간격은 저장 문서와 같은 한글 서식을 사용합니다.';status.classList.remove('notice-caution');
-  }catch(error){status.textContent=`한글 원본 서식 미리보기를 만들지 못했습니다. ${error.message}`;status.classList.add('notice-caution');}
+  }catch(error){
+    const message=localPage
+      ?`원본 한글 서식 미리보기를 만들지 못했습니다. ${error.message}`
+      :'정확한 원본 서식 미리보기는 이 PC의 로컬 미리보기 도구와 한컴오피스 한글이 필요합니다. 로컬 도구를 실행한 뒤 다시 눌러 주세요.';
+    status.textContent=message;status.classList.add('notice-caution');
+  }
   finally{button.disabled=false;button.textContent='문서 미리보기';}
 });
 
@@ -875,15 +861,13 @@ async function exportHwpx() {
   try {
     const model=documentModel();
     let blob, usedNativeTemplate=false;
-    if (['localhost','127.0.0.1'].includes(location.hostname)) {
-      try {
-        const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});
-        if(!response.ok) throw new Error(`내보내기 서버 오류 (${response.status})`);
-        blob=await response.blob();
-        usedNativeTemplate=true;
-      } catch (error) {
-        console.warn('로컬 한글 자동화에 실패해 브라우저에서 HWPX 초안을 만듭니다.',error);
-      }
+    try {
+      const response=await fetch(`${nativeDocumentApiUrl}/api/export`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});
+      if(!response.ok) throw new Error(`내보내기 서버 오류 (${response.status})`);
+      blob=await response.blob();
+      usedNativeTemplate=true;
+    } catch (error) {
+      console.warn('로컬 한글 자동화에 연결하지 못해 원본 HWPX 템플릿을 브라우저에서 채웁니다.',error);
     }
     if (!blob) {
       blob=await createTemplateHwpx(model);
