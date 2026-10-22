@@ -675,28 +675,37 @@ function documentModel() {
     year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
-let previewObjectUrl='';
-$('previewBtn').addEventListener('click',async()=>{
-  const status=$('exportStatus'),button=$('previewBtn');
-  const localPage=['localhost','127.0.0.1'].includes(location.hostname);
-  const previewUrl=`${nativeDocumentApiUrl}/api/preview`;
-  button.disabled=true;button.textContent='한글 서식으로 렌더링 중…';
-  try{
-    const response=await fetch(previewUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:documentModel()})});
-    if(!response.ok)throw new Error(await response.text()||`미리보기 생성 오류 (${response.status})`);
-    const blob=await response.blob();
-    if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
-    previewObjectUrl=URL.createObjectURL(blob);
-    $('documentPreview').innerHTML=`<iframe title="원본 한글 서식 미리보기" src="${previewObjectUrl}"></iframe>`;
-    $('documentPreview').hidden=false;$('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
-    status.textContent='원본 한글 문서를 PDF로 렌더링한 미리보기입니다. 표·글꼴·간격은 저장 문서와 같은 한글 서식을 사용합니다.';status.classList.remove('notice-caution');
-  }catch(error){
-    const message=localPage
-      ?`원본 한글 서식 미리보기를 만들지 못했습니다. ${error.message}`
-      :'정확한 원본 서식 미리보기는 이 PC의 로컬 미리보기 도구와 한컴오피스 한글이 필요합니다. 로컬 도구를 실행한 뒤 다시 눌러 주세요.';
-    status.textContent=message;status.classList.add('notice-caution');
-  }
-  finally{button.disabled=false;button.textContent='문서 미리보기';}
+function previewLine(label,value){
+  return '<div class="preview-line"><strong>'+esc(label)+'</strong><span>'+esc(value||'—').replace(/\n/g,'<br>')+'</span></div>';
+}
+function previewGroup(group,index,kind){
+  const label=String.fromCharCode(0xAC00+0); // label is rendered separately for readability
+  return '<section class="preview-group"><h4>'+esc(['가','나','다','라'][index]||String(index+1))+'. '+esc(group.title)+'</h4><div class="preview-content">'+esc(kind==='short'?group.short:group.detail||'').replace(/\n/g,'<br>')+'</div></section>';
+}
+function previewPage(title,body){
+  return '<article class="preview-sheet"><h3>'+esc(title)+'</h3>'+body+'</article>';
+}
+function renderBrowserPreview(){
+  const m=documentModel();
+  const details=m.groups.map((g,i)=>previewGroup(g,i,'detail')).join('');
+  const summaries=m.groups.map((g,i)=>previewGroup(g,i,'short')).join('');
+  const history=[m.historyDate,m.history].filter(Boolean).join('  ');
+  const education=[m.educationDate,m.education].filter(Boolean).join('  ');
+  const career=[m.careerDate,m.career].filter(Boolean).join('  ');
+  const p1=previewPage('공 적 조 서',previewLine('행사',m.year+'년 '+m.event)+previewLine('성명',m.name)+previewLine('한자',m.hanja)+previewLine('생년월일 / 성별',[m.birth,m.gender].filter(Boolean).join(' / '))+previewLine('소속 / 직위',[m.org,m.position].filter(Boolean).join(' / '))+previewLine('공적기간',m.period)+previewLine('봉사실적',selected().length+'회 · '+readableHours(selected().reduce((sum,r)=>sum+Number(r.hours||0),0)))+previewLine('공적요지',m.gist)+previewLine('주요 학력',education)+previewLine('주요 경력',career)+previewLine('포상기록',history));
+  const p2=previewPage('주 요 공 적 내 용',previewLine('공적개요',m.intro)+details);
+  const p3=previewPage('공 적 개 요 서',previewLine('공적개요',m.intro)+summaries);
+  const p4=previewPage('현 지 조 사 서',previewLine('품성',m.character)+previewLine('지역여론',m.reputation)+previewLine('공적사항',m.matching)+previewLine('조사자',m.investigator)+previewLine('작성일',m.docDate));
+  const target=$('documentPreview');
+  target.innerHTML='<div class="preview-browser-pages">'+p1+p2+p3+p4+'</div>';
+  target.hidden=false;
+  target.scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('previewBtn').addEventListener('click',()=>{
+  renderBrowserPreview();
+  const status=$('exportStatus');
+  status.textContent='미리보기에서 현재 입력한 공적조서·주요 공적내용·공적개요서·현지조사서 4개 문서를 확인할 수 있습니다. 한글 원본 양식의 정확한 표·여백과는 다를 수 있습니다.';
+  status.classList.remove('notice-caution');
 });
 
 // HWPX is an OWPML ZIP package. All text and stamp bytes are assembled in
