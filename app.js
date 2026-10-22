@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
-const MAX_GROUPS = 5;
+const MAX_GROUPS = 4;
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
@@ -490,10 +490,9 @@ $('regroup').addEventListener('click',()=>{
 
 const FIXED_MATCHING = '-공적내용과일치함';
 function fieldInvestigationDraft(rows) {
-  const count=rows.length;
   return {
-    character:`제출된 봉사실적 ${count}건이 확인됨. 품성과 도덕성은 현지조사 자료로 확인 필요.`,
-    reputation:'주민 여론과 사생활은 제출된 봉사실적만으로 확인할 수 없어 현지조사 확인 필요.'
+    character:'평소 성실하고 책임감 있는 자세로 자원봉사활동에 꾸준히 참여함.',
+    reputation:'지역사회 나눔과 봉사활동에 지속적으로 참여하여 이웃사랑을 실천함.'
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
