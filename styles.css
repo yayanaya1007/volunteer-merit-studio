@@ -42,3 +42,12 @@
 .preview-content{line-height:1.8;white-space:normal}
 @media(max-width:600px){.preview-browser-pages{padding:5px;gap:12px}.preview-sheet{padding:20px 15px;min-height:0}.preview-sheet h3{font-size:19px}.preview-line{grid-template-columns:105px minmax(0,1fr);gap:8px;font-size:13px}}
 @media print{.preview-browser-pages{background:white;padding:0}.preview-sheet{box-shadow:none;break-after:page;max-width:none}}
+
+/* Put saved-work recovery at the start of the page. */
+.saved-projects-top{margin:0 0 20px;padding:18px 20px}
+.saved-projects-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.saved-projects-heading h2{margin:0 0 3px;font-size:15px}
+.saved-projects-heading p{margin:0}
+.saved-projects-top .import-project{display:inline-flex!important;flex:0 0 auto;min-height:42px;white-space:nowrap}
+.saved-projects-top #savedProjectsList{margin-top:10px}
+@media(max-width:600px){.saved-projects-top{padding:15px 14px}.saved-projects-heading{align-items:stretch;flex-direction:column;gap:10px}.saved-projects-top .import-project{width:100%;min-height:48px;white-space:normal}.saved-projects-top #savedProjectsList{margin-top:8px}}
