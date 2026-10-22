@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','education','career','history','gist','intro','character','reputation','matching'];
+const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
 const MAX_GROUPS = 5;
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
@@ -488,7 +488,7 @@ $('regroup').addEventListener('click',()=>{
   announce(`실제 활동내용을 다시 분석해 ${groups.length}개 분야의 제목과 공적내용을 작성했습니다. 확인 후 필요한 부분만 수정하세요.`);
 });
 
-const FIXED_MATCHING = '공적내용은 제출된 봉사실적을 근거로 작성하였으며, 원본 및 증빙자료와 최종 대조하여 일치 여부를 확인함.';
+const FIXED_MATCHING = '-공적내용과일치함';
 function fieldInvestigationDraft(rows) {
   const count=rows.length;
   return {
@@ -673,7 +673,7 @@ function documentModel() {
   const active=groups.map((group,index)=>({...group,index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
-    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),career:val('career'),history:val('history'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
+    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
 let previewObjectUrl='';
@@ -780,8 +780,8 @@ async function createTemplateHwpx(model) {
     [marker(5)]:model.serviceNo,[marker(6)]:model.nationality,[marker(7)]:model.address,[marker(8)]:model.phone,[marker(9)]:model.job,
     [marker(10)]:model.org,[marker(11)]:model.rank,[marker(12)]:model.position,[marker(13)]:model.period,[marker(14)]:model.meritField,
     [marker(15)]:model.gist||model.intro,[marker(16)]:model.award,[marker(17)]:model.order,[marker(18)]:model.investigatorRank,
-    [marker(19)]:model.investigator,[marker(20)]:model.recommender,[marker(21)]:dateKor,[marker(22)]:'',[marker(23)]:model.education,
-    [marker(24)]:'',[marker(25)]:model.career,[marker(26)]:model.org,[marker(27)]:model.history,[marker(28)]:model.intro,
+    [marker(19)]:model.investigator,[marker(20)]:model.recommender,[marker(21)]:dateKor,[marker(22)]:model.educationDate,[marker(23)]:model.education,
+    [marker(24)]:model.careerDate,[marker(25)]:model.career,[marker(26)]:model.org,[marker(27)]:[model.historyDate,model.history].filter(Boolean).join('  '),[marker(28)]:model.intro,
     [marker(29)]:model.character,[marker(30)]:model.reputation,[marker(31)]:model.matching,[marker(32)]:model.investigatorOrg
   };
   for(let index=0;index<5;index++){
@@ -808,10 +808,10 @@ function createHwpxXml(model) {
     {text:'공 적 조 서',heading:true},`${model.year}년 ${model.event}`,'',
     `성명: ${model.name}    한자: ${model.hanja}`,`생년월일: ${model.birth}    성별: ${model.gender}`,`주소: ${model.address}`,`소속: ${model.org}    직급·직책: ${model.rank}`,
     `추천 훈격: ${model.award}    추천 순위: ${model.order}`,`공적기간: ${model.period}`,'','공적요지 (50자 내외)',model.gist||'입력 필요','',
-    `주요 경력: ${model.career||'미입력'}`,`과거 표창기록: ${model.history||'미입력'}`,'','위 기록이 틀림없음을 확인합니다.',model.docDate,
+    `주요 학력: ${[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력'}`,`주요 경력: ${[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력'}`,`과거 표창기록: ${[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력'}`,'','위 기록이 틀림없음을 확인합니다.',model.docDate,
     {text:`추천관 ${model.recommender}`,stamp:'recommender'}
   ];
-  const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 경력',model.career||'미입력','과거 표창기록',model.history||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,group.detail||'해당 실적 없음 · 내용 확인 필요'])];
+  const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 학력',[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력','주요 경력',[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력','과거 표창기록',[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,group.detail||'해당 실적 없음 · 내용 확인 필요'])];
   const p3=[{text:'공 적 개 요 서',heading:true},`소속: ${model.org}    직급·직책: ${model.rank}`,`성명: ${model.name}    공적기간: ${model.period}`,'공적 개요',...model.groups.flatMap(group=>[`○ ${group.title}`,group.short||'해당 실적 없음 · 내용 확인 필요'])];
   const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||'—','지역여론 (공·사생활 등)',model.reputation||'—','공적사항 (공적내용과 일치 여부)',model.matching||'검증 후 작성','',model.docDate,`현지조사자  소속: ${model.org}  직위: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
   const sections=[pageSection(p1,0),pageSection(p2,100,true),pageSection(p3,200,true),pageSection(p4,300,true)].join('');
@@ -905,7 +905,7 @@ function loadProjectData(data){
   const groupsToLoad=Array.isArray(data.groups)?data.groups:data.groupData;
   const supported=data.fields&&Array.isArray(data.records)&&Array.isArray(groupsToLoad)&&((data.format==='volunteer-merit-studio')||data.version===1);
   if(!supported)throw new Error('이 앱에서 저장한 작업파일이 아닙니다.');
-  fieldIds.forEach(id=>{if($(id))$(id).value=data.fields[id]??'';});
+  fieldIds.forEach(id=>{if($(id))$(id).value=id==='matching'?FIXED_MATCHING:(data.fields[id]??'');});
   records=data.records.map(record=>({...record,cat:Math.max(0,Number(record.cat)||0)}));
   if(data.version>=3&&groupsToLoad.length>=1&&groupsToLoad.length<=MAX_GROUPS){
     groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:group.detail||'',short:group.short||''}));
@@ -923,18 +923,19 @@ function loadProjectData(data){
 }
 function saveProject(){
   const data=projectData();
-  const content=JSON.stringify(data,null,2);
-  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([content],{type:'application/json'}));
-  link.download=`${safeFilename(val('year'))}_공적조서_${safeFilename(val('name'))}_작업.json`;
-  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
   try{
     const items=savedProjects(),now=new Date().toISOString();
-    items.unshift({id:now+'-'+Math.random().toString(36).slice(2),name:val('name'),year:val('year'),savedAt:now,data});
-    localStorage.setItem(SAVED_PROJECTS_KEY,JSON.stringify(items.slice(0,30)));
+    const name=val('name')||'이름 미입력',year=val('year');
+    // 같은 대상자와 행사연도는 새 파일을 만들지 않고 기존 작업을 갱신한다.
+    const previous=items.find(item=>item.name===name&&item.year===year);
+    const id=previous?.id||(now+'-'+Math.random().toString(36).slice(2));
+    const updated={id,name,year,savedAt:now,data};
+    const next=[updated,...items.filter(item=>item.id!==id)].slice(0,30);
+    localStorage.setItem(SAVED_PROJECTS_KEY,JSON.stringify(next));
     renderSavedProjects();
-    announce('작업파일을 다운로드하고 이 기기의 저장 목록에도 보관했습니다.');
+    announce(name+' 공적조서가 이 웹앱의 저장 목록에 저장되었습니다. 아래에서 다시 불러올 수 있습니다.');
   }catch(error){
-    announce('작업파일은 다운로드했습니다. 이 기기의 저장 공간이 부족하거나 차단되어 목록 저장은 되지 않았습니다.','error');
+    announce('웹앱 저장에 실패했습니다. 브라우저의 저장 공간 또는 개인정보 보호 설정을 확인해 주세요.','error');
   }
 }
 $('saveProject').addEventListener('click',saveProject);
