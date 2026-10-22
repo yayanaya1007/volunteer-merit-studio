@@ -805,6 +805,22 @@ async function createTemplateHwpx(model) {
   const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
   return new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
 }
+async function createCompleteHwpx(model) {
+  // A clean HWPX avoids retaining template example names and organizations.
+  const parts=createHwpxXml(model);
+  const zip=new JSZip();
+  zip.file('mimetype','application/hwp+zip',{compression:'STORE'});
+  zip.file('version.xml',parts.version);
+  zip.file('META-INF/container.xml',parts.container);
+  zip.file('META-INF/manifest.xml',parts.manifest);
+  zip.file('Contents/content.hpf',parts.packageXml);
+  zip.file('Contents/header.xml',parts.headerXml);
+  zip.file('Contents/section0.xml',parts.sectionXml);
+  zip.file('Contents/settings.xml',parts.settings);
+  if(stamp)zip.file('BinData/'+(stamp.type==='image/jpeg'?'stamp.jpg':'stamp.png'),stampBytes());
+  const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
+  return new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
+}
 function pageSection(lines, startId, pageBreak=false) {
   return lines.map((line,index)=>{
     const item=typeof line==='string'?{text:line}:line;
@@ -868,21 +884,11 @@ async function exportHwpx() {
   button.disabled=true; button.textContent='한글 문서 만드는 중…';
   try {
     const model=documentModel();
-    let blob, usedNativeTemplate=false;
-    try {
-      const response=await fetch(`${nativeDocumentApiUrl}/api/export`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});
-      if(!response.ok) throw new Error(`내보내기 서버 오류 (${response.status})`);
-      blob=await response.blob();
-      usedNativeTemplate=true;
-    } catch (error) {
-      console.warn('로컬 한글 자동화에 연결하지 못해 원본 HWPX 템플릿을 브라우저에서 채웁니다.',error);
-    }
-    if (!blob) {
-      blob=await createTemplateHwpx(model);
-    }
+    // Generate a new document from current form values, never serve a stale sample.
+    const blob=await createCompleteHwpx(model);
     const filename=`${safeFilename(model.year)}_공적조서_${safeFilename(model.name)}.hwpx`;
     const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
-    announceExport(usedNativeTemplate?`${filename}을 제공된 한글 원본 서식으로 저장했습니다. 도장과 입력 내용을 확인해 주세요.`:`${filename}을 제공된 한글 원본 서식으로 저장했습니다. 한글에서 입력 내용을 확인해 주세요.`);
+    announceExport(filename+'에 현재 화면의 공적조서·학력·경력·포상·주요 공적·현지조사 내용을 모두 넣었습니다. 한글에서 열어 확인해 주세요.');
   } catch (error) {
     console.error(error); announceExport(`HWPX를 만들지 못했습니다: ${error.message||error}`,'error');
   } finally { button.disabled=false;button.textContent='한글 문서 (.hwpx) 저장'; }
