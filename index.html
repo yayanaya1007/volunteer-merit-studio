@@ -11,12 +11,12 @@
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="api-config.js"></script>
-  <script defer src="app.js?v=20261021-native-preview"></script>
+  <script defer src="app.js?v=20261022-local-save-dates"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">V</span><div><strong>Volunteer Merit Studio</strong><span>자원봉사 공적조서 작성실</span></div></div>
-    <div class="topbar-meta"><span class="local-badge"><i></i> 파일은 이 기기에서 처리됩니다</span><button id="saveProject" class="button button-quiet">작업 저장</button></div>
+    <div class="topbar-meta"><span class="local-badge"><i></i> 파일은 이 기기에서 처리됩니다</span><button id="saveProject" class="button button-quiet">웹앱에 저장</button></div>
   </header>
 
   <main class="layout">
@@ -61,9 +61,9 @@
         <label>조사자 직위<input id="investigatorRank" placeholder="예: 대장"></label>
         <label>추천관<input id="recommender"></label>
         <label>문서 작성일<input id="docDate" type="date"></label>
-        <label class="span-2">주요 학력<textarea id="education" rows="2" placeholder="확인된 학력만 입력"></textarea></label>
-        <label class="span-2">주요 경력<textarea id="career" rows="2" placeholder="확인된 경력만 입력"></textarea></label>
-        <label class="span-2">과거 표창기록<textarea id="history" rows="2" placeholder="확인된 표창기록만 입력"></textarea></label>
+        <label>주요 학력 날짜 (수기)<input id="educationDate" type="date"></label><label>주요 학력 내용 (수기)<textarea id="education" rows="2" placeholder="예: ○○학교 졸업"></textarea></label>
+        <label>주요 경력 날짜 (수기)<input id="careerDate" type="date"></label><label>주요 경력 내용 (수기)<textarea id="career" rows="2" placeholder="예: ○○봉사단 활동"></textarea></label>
+        <label>포상기록 날짜 (수기)<input id="historyDate" type="date"></label><label>포상기록 내용 (수기)<textarea id="history" rows="2" placeholder="예: ○○기관 표창"></textarea></label>
       </div>
     </section>
 
@@ -87,7 +87,7 @@
         <label class="span-2">공적사항 시작 문장<textarea id="intro" rows="2" placeholder="상기인은 … 기여함."></textarea></label>
         <label class="span-2">품성 (도덕성 흠결 여부 등) <span class="field-note">현지조사 후 확인</span><textarea id="character" rows="2" placeholder="조사 결과를 한 줄로 기록"></textarea></label>
         <label class="span-2">지역여론 (공·사생활 등) <span class="field-note">현지조사 후 확인</span><textarea id="reputation" rows="2" placeholder="조사 결과를 한 줄로 기록"></textarea></label>
-        <label class="span-2">공적내용 일치 여부<input id="matching" placeholder="예: 공적내용과 일치함 (확인 후 입력)"></label>
+        <label class="span-2">공적사항 (고정 문구)<input id="matching" value="-공적내용과일치함" readonly></label>
       </div>
       <div class="notice notice-caution">품성·지역여론·공적 일치 여부 문구는 초안입니다. 실제 현지조사 및 증빙자료 확인 후 확정해 주세요.</div>
     </section>
@@ -101,7 +101,7 @@
         <button id="removeStamp" class="button button-text">도장 지우기</button>
       </div>
       <div id="stampPreview" class="stamp-preview" hidden><img id="stampImage" alt="선택한 도장"><span id="stampName"></span><span class="hint">도장은 미리보기용입니다. 저장된 한글 파일에는 별도로 삽입해야 합니다.</span></div>
-      <section class="saved-projects-section" aria-label="저장한 작업 목록"><h3>저장한 작업</h3><p class="hint">이 기기에서 저장한 공적조서를 목록에서 다시 열 수 있습니다. 다른 기기에서는 다운로드한 작업 JSON 파일을 불러오세요.</p><div id="savedProjectsList"></div></section>\n      <div class="preview-actions"><button id="previewBtn" class="button button-light">문서 미리보기</button><button id="downloadHwpx" class="button button-primary">한글 문서 (.hwpx) 저장</button><label class="button button-light import-project">작업 불러오기<input id="jsonFile" type="file" accept=".json"></label></div>
+      <section class="saved-projects-section" aria-label="저장한 작업 목록"><h3>저장한 작업</h3><p class="hint">이 브라우저에 저장한 공적조서를 목록에서 다시 열 수 있습니다. 별도 파일 다운로드 없이 보관됩니다. 브라우저 데이터 삭제나 다른 기기에서는 사라질 수 있습니다.</p><div id="savedProjectsList"></div></section>\n      <div class="preview-actions"><button id="previewBtn" class="button button-light">문서 미리보기</button><button id="downloadHwpx" class="button button-primary">한글 문서 (.hwpx) 저장</button><label class="button button-light import-project">작업 불러오기<input id="jsonFile" type="file" accept=".json"></label></div>
       <div id="exportStatus" class="notice" role="status">미리보기는 입력한 내용을 원본 HWPX 서식으로 렌더링합니다. 공개 사이트에서는 이 PC의 로컬 미리보기 도구와 한컴오피스 한글이 실행 중이어야 합니다.</div>
       <div class="document-preview" id="documentPreview" hidden></div>
     </section>
