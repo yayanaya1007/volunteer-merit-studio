@@ -823,16 +823,16 @@ async function createTemplateHwpx(model) {
   const dateKor=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
   const age=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const born=new Date(year,Number(match[2])-1,Number(match[3]));let value=documentDate.getFullYear()-year;if(documentDate<new Date(documentDate.getFullYear(),born.getMonth(),born.getDate()))value--;return String(Math.max(0,value));})();
   // 양식 안의 표 밖 조사 문구도 해당 항목의 문단만 바꾼다.
-  const replaceExact=(search,value)=>replaceTemplateText(doc,search,value,true);
-  replaceExact('-대한민국자원봉사자2010년부터 2026년까지--대학교 졸업지역 안전 봉사 활동없음2010년부터 2026년까지','');
-  replaceExact('봉사실적 125건 확인. 품성은 현지조사 확인 필요.',model.character);
-  replaceExact('주민 여론은 현지조사 확인 필요.',model.reputation);
-  replaceExact('지역사회 발전에 기여하는 지역사회 봉사자로','');
-  replaceExact('평가받고 있음.','');
-  replaceExact('실적 근거 작성, 증빙 확인 필요.',model.matching);
-  replaceExact('2026년  10월   21일',dateKor);
-  replaceExact('소   속  : 예시봉사회',`소   속  : ${model.investigatorOrg||model.org}`);
-  replaceExact('직   위  :    총무         성  명 : 김조사',`직   위  :    ${model.investigatorRank}         성  명 : ${model.investigator}`);
+  const replaceParagraph=(search,value)=>replaceTemplateText(doc,search,value);
+  replaceParagraph('-대한민국자원봉사자2010년부터 2026년까지--대학교 졸업지역 안전 봉사 활동없음2010년부터 2026년까지','');
+  replaceParagraph('봉사실적 125건 확인. 품성은 현지조사 확인 필요.',model.character);
+  replaceParagraph('주민 여론은 현지조사 확인 필요.',model.reputation);
+  replaceParagraph('지역사회 발전에 기여하는 지역사회 봉사자로','');
+  replaceParagraph('평가받고 있음.','');
+  replaceParagraph('실적 근거 작성, 증빙 확인 필요.',model.matching);
+  replaceParagraph('2026년  10월   21일',dateKor);
+  replaceParagraph('소   속  : 예시봉사회',`소   속  : ${model.investigatorOrg||model.org}`);
+  replaceParagraph('직   위  :    총무         성  명 : 김조사',`직   위  :    ${model.investigatorRank}         성  명 : ${model.investigator}`);
   // 좌표는 제공된 HWPX의 표/행/칸 순서다. 같은 이름·소속이 반복되어도
   // 다른 서류의 칸까지 바뀌지 않도록 각 필드를 정확한 위치에 기록한다.
   const set=(table,row,cell,value)=>setTemplateCellText(doc,table,row,cell,value);
@@ -887,9 +887,10 @@ async function createTemplateHwpx(model) {
   const values={};
   for(let index=0;index<5;index++){
     const group=model.groups[index];
-    values[marker(33+index)]=group?.title||'';
-    values[marker(38+index)]=group?.detail||'';
-    values[marker(43+index)]=group?.short||'';
+    const firstMarker=33+index*3;
+    values[marker(firstMarker)]=group?.title||'';
+    values[marker(firstMarker+1)]=group?.detail||'';
+    values[marker(firstMarker+2)]=group?.short||'';
   }
   for(const [token,value] of Object.entries(values))replaceTemplateText(doc,token,cleanTemplateValue(value));
   zip.file('Contents/section0.xml',new XMLSerializer().serializeToString(doc));
