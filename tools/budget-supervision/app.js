@@ -440,7 +440,7 @@
         const budgetMismatch = pair.op.budget > 0 && result.budget > 0 && pair.op.budget !== result.budget;
         const detailMismatch = pair.op.entries.filter((op) => op.date.getFullYear() === cutoff.year && op.date <= result.cutoffDate && op.detailsAmount > 0 && op.declaredAmount > 0 && op.detailsAmount !== op.declaredAmount);
         const controlMismatch = Object.entries(result.months).filter(([key, month]) => month.control != null && month.control !== month.amount).map(([key, month]) => ({ key, ...month }));
-        return { ...pair, kind, result, budgetMismatch, detailMismatch, controlMismatch, cutoff, detailSuffixes: {}, checkedDetailIds: [] };
+        return { ...pair, kind, result, budgetMismatch, detailMismatch, controlMismatch, cutoff, detailSuffixes: {}, detailNotes: {}, checkedDetailIds: [] };
       });
       if (token !== generationToken) return;
       $('resultTitle').textContent = `${cutoff.year}년 ${cutoff.month}월 말까지`;
@@ -503,6 +503,19 @@
       renderReports();
       programResults.querySelector(`[data-note-subgroup="${select.dataset.noteSubgroup}"]`)?.focus();
     }));
+    programResults.querySelectorAll('[data-apply-note]').forEach((button) => button.addEventListener('click', () => {
+      const report = reports[Number(button.dataset.applyNote)];
+      if (!report) return;
+      const card = button.closest('.program-card');
+      const selectedIds = Array.from(card.querySelectorAll('[data-detail-check]:checked')).map((input) => input.dataset.detailCheck);
+      if (!selectedIds.length || !report.noteKind || !report.noteSubgroup) return;
+      const note = `${report.noteKind} ${report.noteSubgroup}`;
+      report.detailNotes ||= {};
+      selectedIds.forEach((id) => { report.detailNotes[id] = note; });
+      setStatus(`체크한 지출내역 ${selectedIds.length}건의 비고에 ‘${note}’를 적용했습니다.`, 'busy');
+      renderReports();
+      programResults.querySelector(`[data-apply-note="${button.dataset.applyNote}"]`)?.focus();
+    }));
     programResults.querySelectorAll('[data-select-all]').forEach((input) => {
       const report = reports[Number(input.dataset.selectAll)];
       const card = input.closest('.program-card');
@@ -521,6 +534,7 @@
       const card = input.closest('.program-card');
       report.checkedDetailIds = Array.from(card.querySelectorAll('[data-detail-check]:checked')).map((item) => item.dataset.detailCheck);
       updateSelectAll(card, report);
+      updateNoteApply(card, report);
     }));
   }
 
@@ -532,6 +546,12 @@
     selectAll.disabled = total === 0;
     selectAll.checked = total > 0 && selected === total;
     selectAll.indeterminate = selected > 0 && selected < total;
+  }
+
+  function updateNoteApply(card, report) {
+    const button = card.querySelector('[data-apply-note]');
+    if (!button) return;
+    button.disabled = !report.noteKind || !report.noteSubgroup || !(report.checkedDetailIds?.length);
   }
 
   function renderProgram(report, index) {
@@ -549,6 +569,7 @@
         ? ['월드프랜드', '논사니', '달보드레', '뚜기']
         : [];
     const subgroupOptions = subgroups.map((name) => `<option value="${escapeHtml(name)}"${report.noteSubgroup === name ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+    const noteReady = Boolean(report.noteKind && report.noteSubgroup && report.checkedDetailIds?.length);
     return `<article class="program-card">
       <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}">이 사업 HWPX 다운로드</button></div>
       <div class="metrics">
@@ -560,7 +581,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>월</th><th>운영현황 운영비 합계</th><th>집행엑셀 지출 합계</th><th>차이(집행−운영)</th><th>집행엑셀 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="재료 구매">프로그램명 재료 구매</option><option value="재료비 지급">프로그램명 재료비 지급</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><small>선택한 봉사단과 분야를 HWPX 세부 내역의 비고에 넣습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>HWPX 지출내용 / 지출처</th><th>결제방법</th><th>해당 월 합계</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">문구를 적용할 행 앞에 체크한 뒤 메뉴에서 ‘재료 구매’ 또는 ‘재료비 지급’을 선택하세요. 체크한 행에만 적용되고, 나머지 행의 지출내용은 집행엑셀 내용을 유지합니다.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="재료 구매">프로그램명 재료 구매</option><option value="재료비 지급">프로그램명 재료비 지급</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단과 분야를 고르고 행을 체크한 뒤 적용하면, 아래 비고 칸에 표시됩니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>HWPX 지출내용 / 지출처</th><th>결제방법</th><th>비고</th><th>해당 월 합계</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">문구를 적용할 행 앞에 체크한 뒤 메뉴에서 ‘재료 구매’ 또는 ‘재료비 지급’을 선택하세요. 체크한 행에만 적용되고, 나머지 행의 지출내용은 집행엑셀 내용을 유지합니다.</p></div>
     </article>`;
   }
 
@@ -581,7 +602,7 @@
 
   function renderAuditRows(report, reportIndex) {
     const { result } = report;
-    if (!result.details.length) return '<tr><td colspan="6">보고 기간에 지출된 거래가 없습니다.</td></tr>';
+    if (!result.details.length) return '<tr><td colspan="7">보고 기간에 지출된 거래가 없습니다.</td></tr>';
     const selectedIds = new Set(report.checkedDetailIds || []);
     return result.details.map((tx) => {
       const month = result.months[tx.monthKey];
@@ -593,7 +614,7 @@
       const sourceDetail = [tx.merchant, tx.memo].filter(Boolean).join(' · ');
       const review = needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
       const checked = selectedIds.has(tx.id) ? ' checked' : '';
-      return `<tr><td><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${escapeHtml(description)}${review}${sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${status}</td></tr>`;
+      return `<tr><td><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${escapeHtml(description)}${review}${sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${escapeHtml(report.detailNotes?.[tx.id] || '')}</td><td>${status}</td></tr>`;
     }).join('');
   }
 
@@ -661,7 +682,7 @@
     const { result } = report;
     return result.details.map((tx) => {
       const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id]);
-      const note = report.noteKind && report.noteSubgroup ? `${report.noteKind} ${report.noteSubgroup}` : '';
+      const note = report.detailNotes?.[tx.id] || '';
       return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note };
     });
   }
