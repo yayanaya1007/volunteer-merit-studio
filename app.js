@@ -856,7 +856,6 @@ async function createTemplateHwpx(model) {
   set(0,11,3,model.investigatorRank);
   set(0,12,1,'');
   set(0,12,3,model.investigator);
-  replaceTemplateCellText(doc,0,13,0,'2026년  10월   21일',dateKor);
   replaceTemplateCellText(doc,0,14,0,'추천기관장',model.recommender);
 
   const lines=value=>String(value||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
