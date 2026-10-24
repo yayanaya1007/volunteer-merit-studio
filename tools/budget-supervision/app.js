@@ -637,9 +637,15 @@
     updateParagraph(doc, '프로그램명', `❍ 프로그램명 : ${kindLabel(report.kind)}`);
     const titleP = xmlElements(doc, 'p').find((p) => xmlElements(p, 't').map((t) => t.textContent || '').join('').includes('집행현황 및 내역'));
     if (titleP) {
-      const node = xmlElements(titleP, 't')[0];
-      if (node) node.textContent = `4. ${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역 (${cutoffLabel})`;
-      xmlElements(titleP, 't').slice(1).forEach((t) => { t.textContent = ''; });
+      const titleNodes = xmlElements(titleP, 't');
+      const mainTitle = `4. ${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역`;
+      const mainTitleNode = titleNodes.find((t) => (t.textContent || '').includes('집행현황 및 내역'));
+      const cutoffNode = titleNodes.find((t) => (t.textContent || '').includes('기준'));
+      if (mainTitleNode) mainTitleNode.textContent = mainTitle;
+      if (cutoffNode) cutoffNode.textContent = ` (${cutoffLabel})`;
+      titleNodes.forEach((t) => {
+        if (t !== mainTitleNode && t !== cutoffNode) t.textContent = '';
+      });
     }
 
     const tables = xmlElements(doc, 'tbl');
@@ -660,6 +666,8 @@
     const entryRows = rows.slice(2);
     const templateRow = entryRows[entryRows.length - 1];
     const details = reportDetails(report);
+    // Keep the template's first row as the repeating header when HWPX paginates this table.
+    detailTable.setAttribute('repeatHeader', '1');
     while (entryRows.length < details.length) {
       const clone = templateRow.cloneNode(true);
       detailTable.appendChild(clone);
