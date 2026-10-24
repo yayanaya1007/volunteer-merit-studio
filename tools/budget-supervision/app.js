@@ -8,11 +8,18 @@
   const statusNode = $('status');
   const programResults = $('programResults');
   const resultSection = $('results');
+  const savedWorksList = $('savedWorksList');
+  const saveWorkNameInput = $('saveWorkName');
+  const saveWorkButton = $('saveWorkButton');
   const NS = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
   const TEMPLATE_URL = './templates/지도점검_사업별집행현황.hwpx';
+  const WORK_DB_NAME = 'volunteer-budget-supervision';
+  const WORK_STORE_NAME = 'saved-works';
   let operationFiles = [];
   let ledgerFiles = [];
   let reports = [];
+  let pendingReportStates = null;
+  let currentSavedWorkId = null;
   let generationToken = 0;
 
   const normalize = (value) => String(value ?? '').replace(/[\s\r\n]+/g, '').toLowerCase();
@@ -27,6 +34,132 @@
   const moneyCell = (n) => Math.round(n || 0).toLocaleString('ko-KR');
   const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
+
+  function openWorkDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error('이 브라우저는 작업 저장 기능을 지원하지 않습니다.'));
+        return;
+      }
+      const request = window.indexedDB.open(WORK_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(WORK_STORE_NAME)) db.createObjectStore(WORK_STORE_NAME, { keyPath: 'id' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('저장 공간을 열지 못했습니다.'));
+    });
+  }
+
+  async function workDbRequest(mode, requestFactory) {
+    const db = await openWorkDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(WORK_STORE_NAME, mode);
+      let result;
+      const request = requestFactory(transaction.objectStore(WORK_STORE_NAME));
+      request.onsuccess = () => { result = request.result; };
+      request.onerror = () => reject(request.error || new Error('저장한 작업을 처리하지 못했습니다.'));
+      transaction.oncomplete = () => { db.close(); resolve(result); };
+      transaction.onerror = () => { db.close(); reject(transaction.error || new Error('저장한 작업을 처리하지 못했습니다.')); };
+      transaction.onabort = () => { db.close(); reject(transaction.error || new Error('저장 작업이 취소되었습니다.')); };
+    });
+  }
+
+  async function refreshSavedWorks() {
+    try {
+      const savedWorks = await workDbRequest('readonly', (store) => store.getAll());
+      renderSavedWorks(savedWorks || []);
+    } catch (error) {
+      savedWorksList.innerHTML = `<p class="saved-work-empty">${escapeHtml(error.message || '저장 목록을 읽지 못했습니다.')}</p>`;
+    }
+  }
+
+  function renderSavedWorks(savedWorks) {
+    if (!savedWorks.length) {
+      savedWorksList.innerHTML = '<p class="saved-work-empty">저장된 작업이 없습니다.</p>';
+      return;
+    }
+    const sorted = savedWorks.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+    savedWorksList.innerHTML = sorted.map((work) => {
+      const savedAt = new Date(work.savedAt);
+      const savedLabel = Number.isNaN(savedAt.getTime()) ? '' : savedAt.toLocaleString('ko-KR');
+      const files = [...(work.operationFiles || []), ...(work.ledgerFiles || [])].map((file) => file.name).join(' · ');
+      return `<article class="saved-work-item"><div class="saved-work-info"><strong>${escapeHtml(work.name)}</strong><small>${escapeHtml(savedLabel)}${files ? ` · ${escapeHtml(files)}` : ''}</small></div><div class="saved-work-actions"><button class="button button-dark" type="button" data-load-work="${escapeHtml(work.id)}">불러오기</button><button class="button button-light" type="button" data-delete-work="${escapeHtml(work.id)}">삭제</button></div></article>`;
+    }).join('');
+    savedWorksList.querySelectorAll('[data-load-work]').forEach((button) => button.addEventListener('click', () => loadSavedWork(button.dataset.loadWork)));
+    savedWorksList.querySelectorAll('[data-delete-work]').forEach((button) => button.addEventListener('click', () => deleteSavedWork(button.dataset.deleteWork)));
+  }
+
+  async function saveCurrentWork() {
+    if (!reports.length || !operationFiles.length || !ledgerFiles.length) return;
+    saveWorkButton.disabled = true;
+    try {
+      const cutoff = monthInput.value || '2026-09';
+      const defaultName = `${cutoff.slice(0, 4)}년 ${Number(cutoff.slice(5, 7))}월 지도점검`;
+      const work = {
+        id: currentSavedWorkId || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `work-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+        name: cleanText(saveWorkNameInput.value) || defaultName,
+        savedAt: new Date().toISOString(),
+        cutoff,
+        operationFiles: await Promise.all(operationFiles.map(async (file) => ({ name: file.name, type: file.type, lastModified: file.lastModified, blob: file.slice(0, file.size, file.type) }))),
+        ledgerFiles: await Promise.all(ledgerFiles.map(async (file) => ({ name: file.name, type: file.type, lastModified: file.lastModified, blob: file.slice(0, file.size, file.type) }))),
+        reportStates: reports.map((report) => ({
+          kind: report.kind,
+          detailSuffixes: report.detailSuffixes || {},
+          detailNotes: report.detailNotes || {},
+          checkedDetailIds: report.checkedDetailIds || [],
+          noteKind: report.noteKind || '',
+          noteSubgroup: report.noteSubgroup || '',
+        })),
+      };
+      await workDbRequest('readwrite', (store) => store.put(work));
+      currentSavedWorkId = work.id;
+      saveWorkNameInput.value = work.name;
+      await refreshSavedWorks();
+      setStatus(`‘${work.name}’ 작업과 원본 파일을 이 브라우저에 저장했습니다.`, 'busy');
+    } catch (error) {
+      setStatus(error.message || '작업을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.', 'error');
+    } finally {
+      saveWorkButton.disabled = false;
+    }
+  }
+
+  async function loadSavedWork(id) {
+    try {
+      const work = await workDbRequest('readonly', (store) => store.get(id));
+      if (!work) throw new Error('저장한 작업을 찾지 못했습니다.');
+      generationToken += 1;
+      currentSavedWorkId = work.id;
+      operationInput.value = '';
+      ledgerInput.value = '';
+      monthInput.value = work.cutoff || '2026-09';
+      operationFiles = (work.operationFiles || []).map((file) => new File([file.blob], file.name, { type: file.type || '', lastModified: file.lastModified || Date.now() }));
+      ledgerFiles = (work.ledgerFiles || []).map((file) => new File([file.blob], file.name, { type: file.type || '', lastModified: file.lastModified || Date.now() }));
+      renderFileNames(operationFiles, $('operationNames'), '.xls 또는 .xlsx 여러 개 선택');
+      renderFileNames(ledgerFiles, $('ledgerNames'), '.xls 또는 .xlsx 여러 개 선택');
+      saveWorkNameInput.value = work.name || '';
+      pendingReportStates = work.reportStates || [];
+      await analyze();
+      if (!reports.length) throw new Error('저장한 엑셀 파일에서 대조 결과를 만들지 못했습니다. 파일 내용을 확인해 주세요.');
+      setStatus(`‘${work.name}’ 작업을 불러왔습니다.`, 'busy');
+      resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      pendingReportStates = null;
+      setStatus(error.message || '저장한 작업을 불러오지 못했습니다.', 'error');
+    }
+  }
+
+  async function deleteSavedWork(id) {
+    if (!window.confirm('이 저장 작업과 포함된 엑셀 파일을 이 브라우저에서 삭제할까요?')) return;
+    try {
+      await workDbRequest('readwrite', (store) => store.delete(id));
+      if (currentSavedWorkId === id) currentSavedWorkId = null;
+      await refreshSavedWorks();
+      setStatus('저장한 작업을 삭제했습니다.', 'busy');
+    } catch (error) {
+      setStatus(error.message || '저장한 작업을 삭제하지 못했습니다.', 'error');
+    }
+  }
 
   function parseDate(value, defaultYear) {
     if (value instanceof Date && !Number.isNaN(value.getTime())) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -434,21 +567,38 @@
       }
       const pairs = makePairs(opParsed, ledgerParsed, operationFiles, ledgerFiles);
       if (!pairs.length) throw new Error('운영비와 집행액이 있는 표를 찾지 못했습니다. 파일 형식과 표 머리글을 확인해 주세요.');
-      reports = pairs.map((pair) => {
+      reports = pairs.map((pair, index) => {
         const kind = pair.kind;
+        const savedState = pendingReportStates?.find((state) => state.kind === kind) || pendingReportStates?.[index];
         const result = matchBooks(pair.op, pair.ledger, cutoff);
         const budgetMismatch = pair.op.budget > 0 && result.budget > 0 && pair.op.budget !== result.budget;
         const detailMismatch = pair.op.entries.filter((op) => op.date.getFullYear() === cutoff.year && op.date <= result.cutoffDate && op.detailsAmount > 0 && op.declaredAmount > 0 && op.detailsAmount !== op.declaredAmount);
         const controlMismatch = Object.entries(result.months).filter(([key, month]) => month.control != null && month.control !== month.amount).map(([key, month]) => ({ key, ...month }));
-        return { ...pair, kind, result, budgetMismatch, detailMismatch, controlMismatch, cutoff, detailSuffixes: {}, detailNotes: {}, checkedDetailIds: [] };
+        return {
+          ...pair,
+          kind,
+          result,
+          budgetMismatch,
+          detailMismatch,
+          controlMismatch,
+          cutoff,
+          detailSuffixes: savedState?.detailSuffixes || {},
+          detailNotes: savedState?.detailNotes || {},
+          checkedDetailIds: savedState?.checkedDetailIds || [],
+          noteKind: savedState?.noteKind || '',
+          noteSubgroup: savedState?.noteSubgroup || '',
+        };
       });
+      pendingReportStates = null;
       if (token !== generationToken) return;
       $('resultTitle').textContent = `${cutoff.year}년 ${cutoff.month}월 말까지`;
+      if (!saveWorkNameInput.value.trim()) saveWorkNameInput.value = `${cutoff.year}년 ${cutoff.month}월 지도점검`;
       renderReports();
       resultSection.hidden = false;
       setStatus(`${reports.length}개 사업을 분석했습니다. 월별 금액을 대조하고 집행 날짜는 집행엑셀 기준으로 사용합니다.`, 'busy');
     } catch (error) {
       if (token !== generationToken) return;
+      pendingReportStates = null;
       reports = [];
       resultSection.hidden = true;
       setStatus(error.message || '파일을 읽지 못했습니다.', 'error');
@@ -793,14 +943,18 @@
   }
 
   operationInput.addEventListener('change', () => {
+    currentSavedWorkId = null;
     operationFiles = Array.from(operationInput.files || []);
     renderFileNames(operationFiles, $('operationNames'), '.xls 또는 .xlsx 여러 개 선택');
     analyze();
   });
   ledgerInput.addEventListener('change', () => {
+    currentSavedWorkId = null;
     ledgerFiles = Array.from(ledgerInput.files || []);
     renderFileNames(ledgerFiles, $('ledgerNames'), '.xls 또는 .xlsx 여러 개 선택');
     analyze();
   });
   monthInput.addEventListener('change', analyze);
+  saveWorkButton.addEventListener('click', saveCurrentWork);
+  refreshSavedWorks();
 })();
