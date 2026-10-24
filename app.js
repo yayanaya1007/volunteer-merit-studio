@@ -770,6 +770,23 @@ function replaceTemplateText(doc, search, replacement, exactOnly=false) {
     if (index>=0) changeParagraphRange(nodes,index,index+search.length,cleanTemplateValue(replacement));
   }
 }
+function setTemplateCellText(doc, tableIndex, rowIndex, cellIndex, value) {
+  const children=(node,name)=>Array.from(node.children).filter(child=>child.namespaceURI===HWP_NS.hp&&child.localName===name);
+  const table=Array.from(doc.getElementsByTagNameNS(HWP_NS.hp,'tbl'))[tableIndex];
+  const row=table&&children(table,'tr')[rowIndex];
+  const cell=row&&children(row,'tc')[cellIndex];
+  if(!cell)throw new Error('원본 한글 서식의 입력 칸을 찾지 못했습니다.');
+  const textNodes=Array.from(cell.getElementsByTagNameNS(HWP_NS.hp,'t'));
+  const text=cleanTemplateValue(value);
+  if(textNodes.length){textNodes[0].textContent=text;for(const node of textNodes.slice(1))node.textContent='';return;}
+  const paragraph=cell.getElementsByTagNameNS(HWP_NS.hp,'p')[0];
+  let run=paragraph&&paragraph.getElementsByTagNameNS(HWP_NS.hp,'run')[0];
+  if(!run)throw new Error('원본 한글 서식의 빈 입력 칸을 편집할 수 없습니다.');
+  const textNode=doc.createElementNS(HWP_NS.hp,'hp:t');
+  textNode.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');
+  textNode.textContent=text;
+  run.appendChild(textNode);
+}
 async function createTemplateHwpx(model) {
   const response=await fetch(new URL('template-native.hwpx',document.baseURI));
   if(!response.ok)throw new Error(`한글 원본 서식을 불러오지 못했습니다 (${response.status}).`);
@@ -779,19 +796,40 @@ async function createTemplateHwpx(model) {
   const xml=await entry.async('string');
   const doc=new DOMParser().parseFromString(xml,'application/xml');
   if(doc.querySelector('parsererror'))throw new Error('원본 한글 서식을 읽지 못했습니다.');
-  const marker=id=>String.fromCharCode(0xE000+id);
   const documentDate=new Date(`${model.docDate}T00:00:00`);
   const dateKor=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
   const age=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const born=new Date(year,Number(match[2])-1,Number(match[3]));let value=documentDate.getFullYear()-year;if(documentDate<new Date(documentDate.getFullYear(),born.getMonth(),born.getDate()))value--;return String(Math.max(0,value));})();
-  const values={
-    [marker(0)]:model.name,[marker(1)]:model.hanja,[marker(2)]:model.birth,[marker(3)]:model.gender,[marker(4)]:age,
-    [marker(5)]:model.serviceNo,[marker(6)]:model.nationality,[marker(7)]:model.address,[marker(8)]:model.phone,[marker(9)]:model.job,
-    [marker(10)]:model.org,[marker(11)]:model.rank,[marker(12)]:model.position,[marker(13)]:model.period,[marker(14)]:model.meritField,
-    [marker(15)]:model.gist||model.intro,[marker(16)]:model.award,[marker(17)]:model.order,[marker(18)]:model.investigatorRank,
-    [marker(19)]:model.investigator,[marker(20)]:model.recommender,[marker(21)]:dateKor,[marker(22)]:model.educationDate,[marker(23)]:model.education,
-    [marker(24)]:model.careerDate,[marker(25)]:model.career,[marker(26)]:model.org,[marker(27)]:[model.historyDate,model.history].filter(Boolean).join('  '),[marker(28)]:model.intro,
-    [marker(29)]:model.character,[marker(30)]:model.reputation,[marker(31)]:model.matching,[marker(32)]:model.investigatorOrg
-  };
+  const replace=[
+    ['-대한민국자원봉사자2010년부터 2026년까지--대학교 졸업지역 안전 봉사 활동없음2010년부터 2026년까지','',true],
+    ['홍길동',model.name],['洪吉童',model.hanja],['1985.03.04',model.birth],['여',model.gender,true],
+    ['서울시 중구 예시로 10',model.address],['010-0000-0000',model.phone],['예시봉사회',model.org],
+    ['회장',model.rank,true],['대원',model.position,true],['지역사회 봉사',model.meritField,true],
+    ['  꾸준한 자원봉사로 지역사회 안전과 나눔에 기여함.',model.gist||model.intro],
+    ['총무',model.investigatorRank,true],['김조사',model.investigator,true],['추천기관장',model.recommender],
+    ['2010년부터 2026년까지',model.period],['2026년  10월   21일',dateKor],
+    ['상기인은 2010년부터 2026년까지 다섯 분야의 봉사활동에 꾸준히 참여함.',model.intro],
+    ['봉사실적 125건 확인. 품성은 현지조사 확인 필요.',model.character],
+    ['주민 여론은 현지조사 확인 필요.',model.reputation],
+    ['지역사회 발전에 기여하는 지역사회 봉사자로',''],['평가받고 있음.',''],
+    ['실적 근거 작성, 증빙 확인 필요.',model.matching],['(41)',`(${age})`,true]
+  ];
+  for(const [search,value,exactOnly] of replace)replaceTemplateText(doc,search,value,exactOnly);
+  setTemplateCellText(doc,0,1,3,model.serviceNo);
+  setTemplateCellText(doc,0,2,3,model.nationality);
+  setTemplateCellText(doc,0,4,1,model.job);
+  setTemplateCellText(doc,0,6,1,model.period);
+  setTemplateCellText(doc,0,6,3,model.meritField);
+  setTemplateCellText(doc,0,9,1,model.award);
+  setTemplateCellText(doc,0,9,3,model.order);
+  setTemplateCellText(doc,1,2,0,model.educationDate);
+  setTemplateCellText(doc,1,2,1,model.education);
+  setTemplateCellText(doc,1,2,2,model.careerDate);
+  setTemplateCellText(doc,1,2,3,model.career);
+  setTemplateCellText(doc,1,7,0,model.historyDate);
+  setTemplateCellText(doc,1,7,1,model.history);
+  setTemplateCellText(doc,3,1,3,model.period);
+  const marker=id=>String.fromCharCode(0xE000+id);
+  const values={};
   for(let index=0;index<5;index++){
     const group=model.groups[index];
     values[marker(33+index)]=group?.title||'';
@@ -803,7 +841,7 @@ async function createTemplateHwpx(model) {
   const preview=zip.file('Preview/PrvText.txt');
   if(preview)zip.file('Preview/PrvText.txt','공적조서 양식');
   const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
-  return new Blob([patchHwpxZip(bytes)],{type:'application/haansofthwpx'});
+  return new Blob([bytes],{type:'application/haansofthwpx'});
 }
 async function createCompleteHwpx(model) {
   // A clean HWPX avoids retaining template example names and organizations.
@@ -884,8 +922,8 @@ async function exportHwpx() {
   button.disabled=true; button.textContent='한글 문서 만드는 중…';
   try {
     const model=documentModel();
-    // Generate a new document from current form values, never serve a stale sample.
-    const blob=await createCompleteHwpx(model);
+    // Fill the original HWPX package so its Hancom styles, tables and metadata stay intact.
+    const blob=await createTemplateHwpx(model);
     const filename=`${safeFilename(model.year)}_공적조서_${safeFilename(model.name)}.hwpx`;
     const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),30000);
     announceExport(filename+'에 현재 화면의 공적조서·학력·경력·포상·주요 공적·현지조사 내용을 모두 넣었습니다. 한글에서 열어 확인해 주세요.');
