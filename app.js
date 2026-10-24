@@ -414,7 +414,7 @@ function periodText() {
   let years=b.getFullYear()-a.getFullYear(),months=b.getMonth()-a.getMonth();
   if (b.getDate()<a.getDate()) months--;
   if (months<0) {years--;months+=12;}
-  return `${years}년 ${months}개월 (${start.replaceAll('-','.')}~${end.replaceAll('-','.')} 활동)`;
+  return [years?`${years}년`:'',months?`${months}월`:''].filter(Boolean).join(' ')||'0년 0월';
 }
 function renderRows() {
   const visible=records.map((record,index)=>`<tr>
@@ -577,8 +577,8 @@ function draftText({announceResult=true}={}) {
   renderGroups();
   const active=groups.filter((group,index)=>included.some(record=>record.cat===index)).map(group=>group.title);
   $('gist').value=`${active.slice(0,2).join('·')||'자원봉사'} 활동으로 지역사회 발전과 나눔문화 확산에 기여함.`.slice(0,50);
-  const {start,end}=periodRange();
-  const period=start&&end?`${start.slice(0,4)}년부터 ${end.slice(0,4)}년까지`:'확인된 공적기간 동안';
+  const duration=periodText();
+  const period=duration==='실적 날짜 확인 필요'?'확인된 공적기간 동안':`총 ${duration} 동안`;
   const totalHours=included.reduce((sum,record)=>sum+Number(record.hours||0),0);
   $('intro').value=`상기인은 ${period} ${active.slice(0,3).join('·')} 등 자원봉사활동에 성실히 참여하여 지역사회 발전에 기여한 사람임.`;
   const investigation=fieldInvestigationDraft(included);
