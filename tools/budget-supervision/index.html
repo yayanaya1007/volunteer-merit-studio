@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142f42">
+  <meta name="description" content="운영현황 엑셀과 집행장부를 자동 대조해 지도점검 HWPX를 작성합니다.">
+  <title>지도점검표 자동 작성</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="../../vendor/jszip.min.js"></script>
+  <script defer src="../../vendor/xlsx.full.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="../../"><span class="brand-mark">점</span><span><b>지도점검표 자동 작성</b><small>사업별 집행내역 검증</small></span></a>
+    <span class="privacy"><i></i> 파일은 이 기기에서만 처리됩니다</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">운영현황 + 집행장부 → 자동 대조 → 한글 서식</p>
+      <h1>사업비 지출을 대조하고<br>지도점검표를 만드세요</h1>
+      <p class="intro">운영현황 파일과 집행장부를 올리면 활동 날짜·지출액·거래처·결제방법을 자동으로 맞춰 봅니다. 대조 결과를 확인한 뒤, 제공한 HWPX 서식의 구성과 표를 유지한 파일을 내려받을 수 있습니다.</p>
+      <div class="workflow"><span><b>1</b> 운영현황 업로드</span><span class="arrow">→</span><span><b>2</b> 집행장부 업로드</span><span class="arrow">→</span><span><b>3</b> 날짜·금액 확인</span><span class="arrow">→</span><span><b>4</b> HWPX 다운로드</span></div>
+    </section>
+
+    <section class="card upload-card" aria-labelledby="uploadTitle">
+      <div class="section-head"><div class="number">01</div><div><h2 id="uploadTitle">파일을 선택하세요</h2><p>가족봉사단·전문봉사단 운영현황과 각 집행장부 파일을 함께 올리면 사업 종류를 자동으로 구분합니다.</p></div></div>
+      <div class="upload-grid">
+        <label class="dropzone" for="operationFiles">
+          <span class="drop-icon">↥</span><strong>운영현황 엑셀</strong><span>활동일, 운영비, 지출내용, 결제방법을 읽습니다.</span>
+          <small id="operationNames">.xls 또는 .xlsx 여러 개 선택</small>
+          <input id="operationFiles" type="file" accept=".xls,.xlsx,.xlsm" multiple>
+        </label>
+        <label class="dropzone" for="ledgerFiles">
+          <span class="drop-icon">↥</span><strong>집행장부 엑셀</strong><span>거래일, 집행액, 적요, 거래처를 읽습니다.</span>
+          <small id="ledgerNames">.xls 또는 .xlsx 여러 개 선택</small>
+          <input id="ledgerFiles" type="file" accept=".xls,.xlsx,.xlsm" multiple>
+        </label>
+      </div>
+      <div class="options-row">
+        <label for="cutoffMonth">보고 기준 월 <input id="cutoffMonth" type="month" value="2026-09"></label>
+        <span class="autofill-note"><span>✓</span> 파일 값으로 자동 작성 · 별도 수기 입력 없음</span>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite">운영현황 엑셀과 집행장부를 선택하면 자동 분석합니다.</div>
+    </section>
+
+    <section id="results" class="results" hidden>
+      <div class="results-heading">
+        <div><p class="eyebrow">자동 대조 결과</p><h2 id="resultTitle">보고 기간 결과</h2></div>
+      </div>
+      <div id="programResults" class="program-grid"></div>
+    </section>
+
+    <section class="card template-note">
+      <div class="section-head"><div class="number number-muted">02</div><div><h2>원본 한글 서식 보존</h2><p>제공하신 「지도점검_사업별집행현황.hwpx」를 그대로 바탕으로 사용합니다. 제목, 안내문, 표 머리글, 단위와 기타 서식 내용은 유지하고 예산·집행액·거래 상세 값과 필요한 데이터 행만 채웁니다.</p></div></div>
+      <div class="preserve-list"><span>원본 텍스트·표·스타일 보존</span><span>세부 지출 행 자동 확장</span><span>한글에서 열고 편집 가능</span></div>
+    </section>
+
+    <footer>분석은 브라우저 안에서만 진행됩니다. 업로드한 파일은 서버로 전송되지 않습니다. 결제방법이 원자료에서 확인되지 않으면 임의로 추정하지 않고 ‘자료 미확인’으로 표시합니다.</footer>
+  </main>
+</body>
+</html>
