@@ -787,6 +787,29 @@ function setTemplateCellText(doc, tableIndex, rowIndex, cellIndex, value) {
   textNode.textContent=text;
   run.appendChild(textNode);
 }
+function replaceTemplateCellText(doc, tableIndex, rowIndex, cellIndex, search, replacement) {
+  const children=(node,name)=>Array.from(node.children).filter(child=>child.namespaceURI===HWP_NS.hp&&child.localName===name);
+  const table=Array.from(doc.getElementsByTagNameNS(HWP_NS.hp,'tbl'))[tableIndex];
+  const row=table&&children(table,'tr')[rowIndex];
+  const cell=row&&children(row,'tc')[cellIndex];
+  if(!cell)throw new Error('원본 한글 서식의 입력 칸을 찾지 못했습니다.');
+  for(const paragraph of Array.from(cell.getElementsByTagNameNS(HWP_NS.hp,'p'))){
+    const nodes=[];
+    const collectOwnText=node=>{
+      for(const child of node.childNodes){
+        if(child.nodeType!==1)continue;
+        if(child.namespaceURI===HWP_NS.hp&&child.localName==='p')continue;
+        if(child.namespaceURI===HWP_NS.hp&&child.localName==='t')nodes.push(child);
+        else collectOwnText(child);
+      }
+    };
+    collectOwnText(paragraph);
+    const joined=nodes.map(node=>node.textContent||'').join('');
+    const index=joined.indexOf(search);
+    if(index>=0){changeParagraphRange(nodes,index,index+search.length,cleanTemplateValue(replacement));return;}
+  }
+  throw new Error(`원본 한글 서식에서 입력 위치를 찾지 못했습니다: ${search}`);
+}
 async function createTemplateHwpx(model) {
   const response=await fetch(new URL('template-native.hwpx',document.baseURI));
   if(!response.ok)throw new Error(`한글 원본 서식을 불러오지 못했습니다 (${response.status}).`);
@@ -799,35 +822,67 @@ async function createTemplateHwpx(model) {
   const documentDate=new Date(`${model.docDate}T00:00:00`);
   const dateKor=`${documentDate.getFullYear()}년  ${documentDate.getMonth()+1}월   ${documentDate.getDate()}일`;
   const age=(()=>{const match=String(model.birth||'').match(/(\d{2,4})\D+(\d{1,2})\D+(\d{1,2})/);if(!match)return '';let year=Number(match[1]);if(year<100)year+=year<=30?2000:1900;const born=new Date(year,Number(match[2])-1,Number(match[3]));let value=documentDate.getFullYear()-year;if(documentDate<new Date(documentDate.getFullYear(),born.getMonth(),born.getDate()))value--;return String(Math.max(0,value));})();
-  const replace=[
-    ['-대한민국자원봉사자2010년부터 2026년까지--대학교 졸업지역 안전 봉사 활동없음2010년부터 2026년까지','',true],
-    ['홍길동',model.name],['洪吉童',model.hanja],['1985.03.04',model.birth],['여',model.gender,true],
-    ['서울시 중구 예시로 10',model.address],['010-0000-0000',model.phone],['예시봉사회',model.org],
-    ['회장',model.rank,true],['대원',model.position,true],['지역사회 봉사',model.meritField,true],
-    ['  꾸준한 자원봉사로 지역사회 안전과 나눔에 기여함.',model.gist||model.intro],
-    ['총무',model.investigatorRank,true],['김조사',model.investigator,true],['추천기관장',model.recommender],
-    ['2010년부터 2026년까지',model.period],['2026년  10월   21일',dateKor],
-    ['상기인은 2010년부터 2026년까지 다섯 분야의 봉사활동에 꾸준히 참여함.',model.intro],
-    ['봉사실적 125건 확인. 품성은 현지조사 확인 필요.',model.character],
-    ['주민 여론은 현지조사 확인 필요.',model.reputation],
-    ['지역사회 발전에 기여하는 지역사회 봉사자로',''],['평가받고 있음.',''],
-    ['실적 근거 작성, 증빙 확인 필요.',model.matching],['(41)',`(${age})`,true]
-  ];
-  for(const [search,value,exactOnly] of replace)replaceTemplateText(doc,search,value,exactOnly);
-  setTemplateCellText(doc,0,1,3,model.serviceNo);
-  setTemplateCellText(doc,0,2,3,model.nationality);
-  setTemplateCellText(doc,0,4,1,model.job);
-  setTemplateCellText(doc,0,6,1,model.period);
-  setTemplateCellText(doc,0,6,3,model.meritField);
-  setTemplateCellText(doc,0,9,1,model.award);
-  setTemplateCellText(doc,0,9,3,model.order);
-  setTemplateCellText(doc,1,2,0,model.educationDate);
-  setTemplateCellText(doc,1,2,1,model.education);
-  setTemplateCellText(doc,1,2,2,model.careerDate);
-  setTemplateCellText(doc,1,2,3,model.career);
-  setTemplateCellText(doc,1,7,0,model.historyDate);
-  setTemplateCellText(doc,1,7,1,model.history);
-  setTemplateCellText(doc,3,1,3,model.period);
+  // 양식 안의 표 밖 조사 문구도 해당 항목의 문단만 바꾼다.
+  const replaceExact=(search,value)=>replaceTemplateText(doc,search,value,true);
+  replaceExact('-대한민국자원봉사자2010년부터 2026년까지--대학교 졸업지역 안전 봉사 활동없음2010년부터 2026년까지','');
+  replaceExact('봉사실적 125건 확인. 품성은 현지조사 확인 필요.',model.character);
+  replaceExact('주민 여론은 현지조사 확인 필요.',model.reputation);
+  replaceExact('지역사회 발전에 기여하는 지역사회 봉사자로','');
+  replaceExact('평가받고 있음.','');
+  replaceExact('실적 근거 작성, 증빙 확인 필요.',model.matching);
+  replaceExact('2026년  10월   21일',dateKor);
+  replaceExact('소   속  : 예시봉사회',`소   속  : ${model.investigatorOrg||model.org}`);
+  replaceExact('직   위  :    총무         성  명 : 김조사',`직   위  :    ${model.investigatorRank}         성  명 : ${model.investigator}`);
+  // 좌표는 제공된 HWPX의 표/행/칸 순서다. 같은 이름·소속이 반복되어도
+  // 다른 서류의 칸까지 바뀌지 않도록 각 필드를 정확한 위치에 기록한다.
+  const set=(table,row,cell,value)=>setTemplateCellText(doc,table,row,cell,value);
+  set(0,0,1,model.name);
+  set(0,0,2,`(한 자) ${model.hanja}`);
+  set(0,1,1,model.birth);
+  set(0,1,3,model.serviceNo);
+  set(0,2,1,model.gender);
+  set(0,2,3,model.nationality);
+  set(0,3,1,`${model.address}${model.phone?`  (연락처: ${model.phone})`:''}`);
+  set(0,4,1,model.job);
+  set(0,4,3,model.org);
+  set(0,5,1,model.rank);
+  set(0,5,3,model.position);
+  set(0,6,1,model.period);
+  set(0,6,3,model.meritField);
+  set(0,8,0,model.gist||model.intro);
+  set(0,9,1,model.award);
+  set(0,9,3,model.order);
+  set(0,11,1,model.investigatorOrg||model.org);
+  set(0,11,3,model.investigatorRank);
+  set(0,12,1,'');
+  set(0,12,3,model.investigator);
+  replaceTemplateCellText(doc,0,13,0,'2026년  10월   21일',dateKor);
+  replaceTemplateCellText(doc,0,14,0,'추천기관장',model.recommender);
+
+  const lines=value=>String(value||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+  const writeRows=(table,firstRow,firstCell,rowCount,dates,contents)=>{
+    const dateLines=lines(dates),contentLines=lines(contents);
+    for(let index=0;index<rowCount;index++){
+      const row=firstRow+index;
+      set(table,row,firstCell,dateLines.slice(index,index+1).join(''));
+      set(table,row,firstCell+1,contentLines.slice(index,index+1).join(''));
+    }
+  };
+  writeRows(1,2,0,3,model.educationDate,model.education);
+  writeRows(1,2,2,3,model.careerDate,model.career);
+  writeRows(1,7,0,2,model.historyDate,model.history);
+  // 공적조서의 요지와 공적사항, 공적개요서는 각각 원래 문서 칸에 채운다.
+  replaceTemplateCellText(doc,1,10,0,'상기인은 2010년부터 2026년까지 다섯 분야의 봉사활동에 꾸준히 참여함.',model.intro);
+  set(3,1,0,model.org);
+  set(3,1,1,model.rank);
+  replaceTemplateCellText(doc,3,1,2,'홍길동',model.name);
+  replaceTemplateCellText(doc,3,1,2,'(41)',age?`(${age}세)`: '');
+  set(3,1,3,model.period);
+  set(4,0,1,model.org);
+  set(4,1,1,model.rank);
+  set(4,1,3,`${model.birth}${model.gender?`(${model.gender})`:''}`);
+  replaceTemplateCellText(doc,4,2,1,'홍길동',model.name);
+  replaceTemplateCellText(doc,4,2,1,'洪吉童',model.hanja);
   const marker=id=>String.fromCharCode(0xE000+id);
   const values={};
   for(let index=0;index<5;index++){
