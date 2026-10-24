@@ -440,7 +440,7 @@
         const budgetMismatch = pair.op.budget > 0 && result.budget > 0 && pair.op.budget !== result.budget;
         const detailMismatch = pair.op.entries.filter((op) => op.date.getFullYear() === cutoff.year && op.date <= result.cutoffDate && op.detailsAmount > 0 && op.declaredAmount > 0 && op.detailsAmount !== op.declaredAmount);
         const controlMismatch = Object.entries(result.months).filter(([key, month]) => month.control != null && month.control !== month.amount).map(([key, month]) => ({ key, ...month }));
-        return { ...pair, kind, result, budgetMismatch, detailMismatch, controlMismatch, cutoff };
+        return { ...pair, kind, result, budgetMismatch, detailMismatch, controlMismatch, cutoff, descriptionSuffix: '' };
       });
       if (token !== generationToken) return;
       $('resultTitle').textContent = `${cutoff.year}년 ${cutoff.month}월 말까지`;
@@ -471,6 +471,13 @@
   function renderReports() {
     programResults.innerHTML = reports.map((report, index) => renderProgram(report, index)).join('');
     programResults.querySelectorAll('[data-download]').forEach((button) => button.addEventListener('click', () => downloadReport(Number(button.dataset.download))));
+    programResults.querySelectorAll('[data-description-suffix]').forEach((select) => select.addEventListener('change', () => {
+      const report = reports[Number(select.dataset.descriptionSuffix)];
+      if (!report) return;
+      report.descriptionSuffix = select.value;
+      renderReports();
+      programResults.querySelector(`[data-description-suffix="${select.dataset.descriptionSuffix}"]`)?.focus();
+    }));
   }
 
   function renderProgram(report, index) {
@@ -483,7 +490,7 @@
     const monthRows = Object.entries(result.months).filter(([, m]) => m.amount || m.operationAmount || m.control != null);
     const mismatchedMonths = result.monthMismatches.length;
     return `<article class="program-card">
-      <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}">이 사업 HWPX 다운로드</button></div>
+      <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}"${report.descriptionSuffix ? '' : ' disabled'}>${report.descriptionSuffix ? '이 사업 HWPX 다운로드' : '문구 선택 후 다운로드'}</button></div>
       <div class="metrics">
         <div class="metric"><span>장부 예산액</span><b>${budget ? moneyText(budget) : '자료 미확인'}</b><small>${escapeHtml(opBudgetText)}</small></div>
         <div class="metric"><span>${cutoff.month}월 말 누적 집행액</span><b>${moneyText(result.total)}</b><small>집행장부 거래일 기준</small></div>
@@ -493,7 +500,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>월</th><th>운영현황 운영비 합계</th><th>집행엑셀 지출 합계</th><th>차이(집행−운영)</th><th>집행엑셀 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><h4>집행엑셀 기준 지출내역</h4><div class="table-wrap"><table class="audit-table"><thead><tr><th>집행 날짜</th><th>집행액</th><th>HWPX 지출내용 / 지출처</th><th>결제방법</th><th>해당 월 합계</th></tr></thead><tbody>${renderAuditRows(report)}</tbody></table></div><p class="detail-note">날짜는 집행엑셀에 적힌 날짜를 그대로 기록합니다. 지출내용은 프로그램명 뒤에 ‘재료’를 붙이며, 운영현황 대조는 월별 합계로 합니다.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">지출내용 메뉴 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내용 선택"><option value=""${report.descriptionSuffix ? '' : ' selected'}>먼저 선택</option><option value="재료"${report.descriptionSuffix === '재료' ? ' selected' : ''}>프로그램명 재료</option><option value="재료비 지급"${report.descriptionSuffix === '재료비 지급' ? ' selected' : ''}>프로그램명 재료비 지급</option></select></label></div><div class="table-wrap"><table class="audit-table"><thead><tr><th>집행 날짜</th><th>집행액</th><th>HWPX 지출내용 / 지출처</th><th>결제방법</th><th>해당 월 합계</th></tr></thead><tbody>${renderAuditRows(report)}</tbody></table></div><p class="detail-note">메뉴에서 문구를 직접 선택해야 한글파일을 내려받을 수 있습니다. 선택한 문구는 프로그램명 뒤에 붙습니다. 날짜는 집행엑셀 기준입니다.</p></div>
     </article>`;
   }
 
@@ -520,7 +527,7 @@
       const status = month?.difference === 0
         ? '<span class="badge match">월 합계 일치</span>'
         : `<span class="badge unmatched">월 차이 ${moneyText(month?.difference || 0)}</span>`;
-      const { description, needsReview } = reportDescription(tx, result);
+      const { description, needsReview } = reportDescription(tx, result, report.descriptionSuffix);
       const sourceDetail = [tx.merchant, tx.memo].filter(Boolean).join(' · ');
       const review = needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
       return `<tr><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${escapeHtml(description)}${review}${sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${status}</td></tr>`;
@@ -585,7 +592,7 @@
     return items.join(' · ');
   }
 
-  function reportDescription(tx, result) {
+  function reportDescription(tx, result, suffix = '재료') {
     const matched = tx.matchedOperation;
     const matchedProgram = cleanText(matched?.activity || matched?.group);
     const monthPrograms = [...new Set(result.opThroughPeriod
@@ -593,7 +600,7 @@
       .map((op) => cleanText(op.activity || op.group))
       .filter(Boolean))];
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
-    return { description: `${program} 재료`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
+    return { description: `${program} ${suffix || '문구 선택 필요'}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
   function reportDetails(report) {
@@ -603,7 +610,7 @@
       let status = month?.difference === 0
         ? `${tx.monthKey} 월별 합계 일치`
         : `${tx.monthKey} 월별 합계 차이 ${moneyCell(month?.difference || 0)}원 확인`;
-      const { description, needsReview } = reportDescription(tx, result);
+      const { description, needsReview } = reportDescription(tx, result, report.descriptionSuffix);
       if (needsReview) status += ' · 프로그램명 확인 필요';
       return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note: status };
     });
