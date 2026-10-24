@@ -10,7 +10,6 @@
   const resultSection = $('results');
   const NS = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
   const TEMPLATE_URL = './templates/지도점검_사업별집행현황.hwpx';
-  const WINDOW_DAYS = 14;
   let operationFiles = [];
   let ledgerFiles = [];
   let reports = [];
@@ -27,8 +26,7 @@
   const moneyText = (n) => `${Math.round(n || 0).toLocaleString('ko-KR')}원`;
   const moneyCell = (n) => Math.round(n || 0).toLocaleString('ko-KR');
   const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
-  const dayKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '';
-  const daysBetween = (a, b) => Math.round((Date.UTC(a.getFullYear(), a.getMonth(), a.getDate()) - Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())) / 86400000);
+  const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
   function parseDate(value, defaultYear) {
     if (value instanceof Date && !Number.isNaN(value.getTime())) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -196,7 +194,6 @@
         id: `op-${r + 1}`,
         rowNumber: r + 1,
         date,
-        dateKey: dayKey(date),
         amount,
         declaredAmount: declared,
         detailsAmount: items.reduce((sum, item) => sum + item.amount, 0),
@@ -209,9 +206,6 @@
         remarks,
         kind,
         sourceFile: file.name,
-        matchedIds: [],
-        matchedAmount: 0,
-        status: 'unmatched',
       });
     }
     const summaryValues = rows.slice(0, Math.min(8, rows.length)).flat().map(money).filter((n) => n > 1000);
@@ -294,7 +288,6 @@
         id: `tx-${r + 1}`,
         rowNumber: r + 1,
         date,
-        dateKey: dayKey(date),
         amount,
         memo,
         merchant,
@@ -309,11 +302,9 @@
   function subsetForAmount(candidates, target, operation) {
     if (!candidates.length || target <= 0) return null;
     const sorted = candidates.slice().sort((a, b) => {
-      const da = Math.abs(daysBetween(a.date, operation.date));
-      const db = Math.abs(daysBetween(b.date, operation.date));
       const va = operation.items.some((it) => normalize(it.label).includes(normalize(a.merchant)) || normalize(a.merchant).includes(normalize(it.label)));
       const vb = operation.items.some((it) => normalize(it.label).includes(normalize(b.merchant)) || normalize(b.merchant).includes(normalize(it.label)));
-      return (da * 10 - (va ? 4 : 0)) - (db * 10 - (vb ? 4 : 0));
+      return Number(vb) - Number(va);
     });
     let best = null;
     let bestScore = Infinity;
@@ -329,7 +320,7 @@
         const next = sum + tx.amount;
         if (next > target) continue;
         chosen.push(tx);
-        search(i + 1, next, chosen, score + Math.abs(daysBetween(tx.date, operation.date)) * 10);
+        search(i + 1, next, chosen, score + (operation.items.some((it) => normalize(it.label).includes(normalize(tx.merchant)) || normalize(tx.merchant).includes(normalize(it.label))) ? 0 : 1));
         chosen.pop();
       }
     }
@@ -339,42 +330,54 @@
 
   function matchBooks(operation, ledger, cutoff) {
     const allTransactions = ledger.transactions.slice().sort((a, b) => a.date - b.date || a.rowNumber - b.rowNumber);
-    for (const op of operation.entries.slice().sort((a, b) => a.date - b.date || a.rowNumber - b.rowNumber)) {
-      const candidates = allTransactions.filter((tx) => !tx.matchedOperation && Math.abs(daysBetween(tx.date, op.date)) <= WINDOW_DAYS);
-      const found = subsetForAmount(candidates, op.amount, op);
-      if (found) {
-        op.matchedIds = found.map((tx) => tx.id);
-        op.matchedAmount = found.reduce((sum, tx) => sum + tx.amount, 0);
-        op.status = found.every((tx) => daysBetween(tx.date, op.date) === 0) ? 'match' : 'date';
-        for (const tx of found) tx.matchedOperation = op;
+    const operationMonths = new Map();
+    for (const op of operation.entries.filter((entry) => entry.date.getFullYear() === cutoff.year)) {
+      const key = monthKey(op.date);
+      if (!operationMonths.has(key)) operationMonths.set(key, []);
+      operationMonths.get(key).push(op);
+    }
+    for (const [key, entries] of operationMonths) {
+      const monthTransactions = allTransactions.filter((tx) => monthKey(tx.date) === key);
+      for (const op of entries.slice().sort((a, b) => a.rowNumber - b.rowNumber)) {
+        const candidates = monthTransactions.filter((tx) => !tx.matchedOperation);
+        const found = subsetForAmount(candidates, op.amount, op);
+        if (found) {
+          for (const tx of found) tx.matchedOperation = op;
+        }
       }
     }
     const cutoffDate = new Date(cutoff.year, cutoff.month, 0, 23, 59, 59, 999);
     const txs = allTransactions.filter((tx) => tx.date <= cutoffDate && tx.date.getFullYear() === cutoff.year);
-    const includedIds = new Set(txs.map((tx) => tx.id));
     const opThroughPeriod = operation.entries.filter((op) => op.date.getFullYear() === cutoff.year && op.date <= cutoffDate);
-    const relevantOps = operation.entries.filter((op) => op.date.getFullYear() === cutoff.year && (op.date <= cutoffDate || op.matchedIds.some((id) => includedIds.has(id))));
-    const matchedTransactions = txs.filter((tx) => tx.matchedOperation);
-    const matchedAmount = matchedTransactions.reduce((sum, tx) => sum + tx.amount, 0);
     const total = txs.reduce((sum, tx) => sum + tx.amount, 0);
-    const unmatchedTransactions = txs.filter((tx) => !tx.matchedOperation);
-    const unmatchedOperations = opThroughPeriod.filter((op) => !op.matchedIds.length);
     const operationAmounts = opThroughPeriod.reduce((sum, op) => sum + op.amount, 0);
     const months = {};
     for (let m = 1; m <= cutoff.month; m += 1) {
       const key = `${cutoff.year}-${String(m).padStart(2, '0')}`;
       const monthTx = txs.filter((tx) => `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}` === key);
       const amount = monthTx.reduce((sum, tx) => sum + tx.amount, 0);
-      const matched = monthTx.filter((tx) => tx.matchedOperation).reduce((sum, tx) => sum + tx.amount, 0);
-      months[key] = { amount, matched, unmatched: amount - matched, control: ledger.monthlyControl[key] ?? null };
+      const operationAmount = opThroughPeriod.filter((op) => monthKey(op.date) === key).reduce((sum, op) => sum + op.amount, 0);
+      months[key] = { amount, operationAmount, difference: amount - operationAmount, control: ledger.monthlyControl[key] ?? null };
     }
-    const details = txs.map((tx) => ({
-      ...tx,
-      operation: tx.matchedOperation,
-      method: tx.method || tx.matchedOperation?.method || '',
-      dateDifference: tx.matchedOperation ? daysBetween(tx.date, tx.matchedOperation.date) : null,
-    }));
-    return { transactions: txs, details, total, matchedAmount, unmatchedAmount: total - matchedAmount, unmatchedTransactions, unmatchedOperations, opThroughPeriod, relevantOps, operationAmounts, months, cutoffDate, budget: ledger.budget };
+    const operationMethodsByMonth = new Map();
+    for (const op of opThroughPeriod) {
+      if (!op.method) continue;
+      const key = monthKey(op.date);
+      if (!operationMethodsByMonth.has(key)) operationMethodsByMonth.set(key, new Set());
+      operationMethodsByMonth.get(key).add(op.method);
+    }
+    const details = txs.map((tx) => {
+      const key = monthKey(tx.date);
+      const monthMethods = operationMethodsByMonth.get(key) || new Set();
+      return {
+        ...tx,
+        method: tx.method || tx.matchedOperation?.method || (monthMethods.size === 1 ? [...monthMethods][0] : ''),
+        monthKey: key,
+      };
+    });
+    const monthMismatches = Object.entries(months).filter(([, value]) => value.difference !== 0);
+    const monthlyDeviation = monthMismatches.reduce((sum, [, value]) => sum + Math.abs(value.difference), 0);
+    return { transactions: txs, details, opThroughPeriod, operationAmounts, months, monthMismatches, monthlyDeviation, cutoffDate, budget: ledger.budget };
   }
 
   function determineKind(op, ledger, opFile, ledgerFile) {
@@ -412,7 +415,7 @@
       setStatus('운영현황 엑셀과 집행장부를 모두 선택하면 자동 분석합니다.');
       return;
     }
-    setStatus('엑셀 시트를 찾아 날짜·금액·결제 정보를 대조하고 있습니다…', 'busy');
+    setStatus('엑셀 시트를 찾아 월별 운영비·집행액과 결제방법을 확인하고 있습니다…', 'busy');
     try {
       const [opBooks, ledgerBooks] = await Promise.all([
         Promise.all(operationFiles.map(readBook)),
@@ -443,7 +446,7 @@
       $('resultTitle').textContent = `${cutoff.year}년 ${cutoff.month}월 말까지`;
       renderReports();
       resultSection.hidden = false;
-      setStatus(`${reports.length}개 사업을 분석했습니다. 장부의 실제 거래일 기준으로 기간을 잘라 HWPX에 반영합니다.`, 'busy');
+      setStatus(`${reports.length}개 사업을 분석했습니다. 월별 금액을 대조하고 집행 날짜는 집행엑셀 기준으로 사용합니다.`, 'busy');
     } catch (error) {
       if (token !== generationToken) return;
       reports = [];
@@ -477,19 +480,20 @@
     const opBudgetText = op.budget ? `운영현황 ${moneyText(op.budget)}` : '운영현황 예산액 미확인';
     const ledgerBudgetText = budget ? `장부 ${moneyText(budget)}` : '장부 배정 예산 미확인';
     const alerts = buildAlerts(report);
-    const monthRows = Object.entries(result.months).filter(([, m]) => m.amount || m.control != null);
+    const monthRows = Object.entries(result.months).filter(([, m]) => m.amount || m.operationAmount || m.control != null);
+    const mismatchedMonths = result.monthMismatches.length;
     return `<article class="program-card">
       <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}">이 사업 HWPX 다운로드</button></div>
       <div class="metrics">
         <div class="metric"><span>장부 예산액</span><b>${budget ? moneyText(budget) : '자료 미확인'}</b><small>${escapeHtml(opBudgetText)}</small></div>
         <div class="metric"><span>${cutoff.month}월 말 누적 집행액</span><b>${moneyText(result.total)}</b><small>집행장부 거래일 기준</small></div>
-        <div class="metric"><span>운영내역과 금액 일치</span><b>${moneyText(result.matchedAmount)}</b><small>활동일 ±${WINDOW_DAYS}일 내 정확 합계 대조</small></div>
-        <div class="metric"><span>미대응 장부 집행액</span><b>${moneyText(result.unmatchedAmount)}</b><small>${result.unmatchedTransactions.length}건 · 잔액 ${remaining == null ? '—' : moneyText(remaining)}</small></div>
+        <div class="metric"><span>운영현황 운영비 누계</span><b>${moneyText(result.operationAmounts)}</b><small>활동일의 월별 운영비 합계</small></div>
+        <div class="metric"><span>월별 합계 차이</span><b>${mismatchedMonths ? `${mismatchedMonths}개월` : '모두 일치'}</b><small>${moneyText(result.monthlyDeviation)} · 잔액 ${remaining == null ? '—' : moneyText(remaining)}</small></div>
       </div>
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
-      ${monthRows.length ? `<table class="months"><thead><tr><th>거래월</th><th>장부 합계</th><th>대조된 금액</th><th>미대응</th><th>장부 월계 확인</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.matched)}</td><td>${moneyText(m.unmatched)}</td><td>${m.control == null ? '장부 월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><h4>운영 날짜·금액과 실제 거래 대조</h4><div class="table-wrap"><table class="audit-table"><thead><tr><th>운영현황 활동일</th><th>운영비</th><th>장부 결제일·금액</th><th>지출처 / 내용</th><th>결제방법</th><th>결과</th></tr></thead><tbody>${renderAuditRows(report)}</tbody></table></div><p class="detail-note">장부 날짜가 활동 날짜와 다를 수 있어 실제 지출일은 집행장부 기준으로 보고서에 넣습니다. 대조용 활동일은 비고에 함께 기록합니다.</p></div>
+      ${monthRows.length ? `<table class="months"><thead><tr><th>월</th><th>운영현황 운영비 합계</th><th>집행엑셀 지출 합계</th><th>차이(집행−운영)</th><th>집행엑셀 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
+      <div class="detail-section"><h4>집행엑셀 기준 지출내역</h4><div class="table-wrap"><table class="audit-table"><thead><tr><th>집행 날짜</th><th>집행액</th><th>HWPX 지출내용 / 지출처</th><th>결제방법</th><th>해당 월 합계</th></tr></thead><tbody>${renderAuditRows(report)}</tbody></table></div><p class="detail-note">날짜는 집행엑셀에 적힌 날짜를 그대로 기록합니다. 지출내용은 프로그램명 뒤에 ‘재료’를 붙이며, 운영현황 대조는 월별 합계로 합니다.</p></div>
     </article>`;
   }
 
@@ -498,38 +502,29 @@
     const alerts = [];
     if (budgetMismatch) alerts.push({ type: 'warn', text: `예산액이 서로 다릅니다. ${op.budget.toLocaleString()}원(운영현황) · ${result.budget.toLocaleString()}원(집행장부). HWPX 예산액은 장부 기준으로 넣고 차이를 비고에 남깁니다.` });
     else if (result.budget) alerts.push({ type: 'good', text: `예산액 확인: 운영현황 ${op.budget ? moneyText(op.budget) : '미기재'} · 집행장부 ${moneyText(result.budget)}.` });
-    if (result.unmatchedTransactions.length) alerts.push({ type: 'warn', text: `집행장부 ${result.unmatchedTransactions.length}건 ${moneyText(result.unmatchedAmount)}은 운영 기록에서 날짜·금액을 함께 만족하는 항목을 찾지 못했습니다. HWPX에 거래를 남기고 ‘운영현황 미확인’으로 표시합니다.` });
-    if (result.unmatchedOperations.length) {
-      const total = result.unmatchedOperations.reduce((sum, row) => sum + row.amount, 0);
-      alerts.push({ type: 'warn', text: `운영현황 ${result.unmatchedOperations.length}건 ${moneyText(total)}은 기준일까지 집행장부에서 대응 거래를 찾지 못했습니다. 외상·미집행 표시가 있는지 확인 대상입니다.` });
-    }
-    if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다: ${detailMismatch.map((x) => `${dateText(x.date)} ${moneyText(x.amount)}(상세 ${moneyText(x.detailsAmount)})`).join(' · ')}.` });
+    if (result.monthMismatches.length) alerts.push({ type: 'warn', text: `월별 합계가 다른 달이 ${result.monthMismatches.length}개월입니다: ${result.monthMismatches.map(([key, month]) => `${key} 운영 ${moneyText(month.operationAmount)} / 집행 ${moneyText(month.amount)} (차이 ${moneyText(month.difference)})`).join(' · ')}.` });
+    else if (Object.keys(result.months).length) alerts.push({ type: 'good', text: '보고 기간의 운영현황과 집행엑셀 월별 합계가 모두 일치합니다. 날짜는 대조 기준에 사용하지 않았습니다.' });
+    if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다. 해당 행의 상세 합계를 확인해 주세요.` });
     if (controlMismatch.length) alerts.push({ type: 'error', text: `집행장부 월계 행과 거래내역 합계가 다른 월이 ${controlMismatch.length}개 있습니다: ${controlMismatch.map((x) => `${x.key} (${moneyText(x.amount)} vs ${moneyText(x.control)})`).join(' · ')}.` });
     const methodMissing = result.details.filter((tx) => !tx.method).length;
     if (methodMissing) alerts.push({ type: 'warn', text: `결제방법을 운영현황에서 찾지 못한 거래가 ${methodMissing}건 있습니다. HWPX에는 ‘자료 미확인’으로 입력합니다.` });
-    if (!alerts.some((a) => a.type !== 'good')) alerts.push({ type: 'good', text: '보고 기간의 집행장부 거래와 운영현황 금액을 자동 대조했습니다. 대조된 금액은 일치합니다.' });
+    if (!alerts.length) alerts.push({ type: 'good', text: '보고 기간의 월별 운영비와 집행액 합계를 대조했습니다.' });
     return alerts;
   }
 
   function renderAuditRows(report) {
     const { result } = report;
-    const rows = [];
-    for (const op of result.relevantOps) {
-      const txs = result.transactions.filter((tx) => tx.matchedOperation?.id === op.id);
-      const txAmount = txs.reduce((sum, tx) => sum + tx.amount, 0);
-      const dates = txs.map((tx) => `${dateText(tx.date)} ${moneyText(tx.amount)}`).join('<br>');
-      const vendors = txs.map((tx) => escapeHtml(tx.merchant || tx.memo)).join('<br>');
-      const method = [...new Set(txs.map((tx) => tx.method || op.method).filter(Boolean))].join(', ') || '자료 미확인';
-      const exact = txs.length && txAmount === op.amount;
-      const sameDay = txs.length && txs.every((tx) => dayKey(tx.date) === op.dateKey);
-      const badge = exact ? (sameDay ? '<span class="badge match">날짜·금액 일치</span>' : '<span class="badge date">금액 일치 · 날짜 차이</span>') : '<span class="badge unmatched">장부 대응 없음</span>';
-      rows.push(`<tr><td>${escapeHtml(dateText(op.date))}<span class="small-text">${escapeHtml(op.activity || op.group || '')}</span></td><td class="num">${moneyText(op.amount)}</td><td>${dates || '—'}${txs.length && !sameDay ? `<span class="small-text">활동일 대비 ${Math.max(...txs.map((tx) => Math.abs(daysBetween(tx.date, op.date))))}일 이내</span>` : ''}</td><td>${vendors || escapeHtml(op.detail || '—')}</td><td><span class="badge method">${escapeHtml(method)}</span></td><td>${badge}</td></tr>`);
-    }
-    for (const tx of result.unmatchedTransactions) {
-      rows.push(`<tr><td>운영현황 미확인</td><td class="num">—</td><td>${escapeHtml(dateText(tx.date))}<span class="small-text">${moneyText(tx.amount)}</span></td><td>${escapeHtml(tx.merchant || tx.memo || '—')}<span class="small-text">${escapeHtml(tx.memo || '')}</span></td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td><span class="badge unmatched">운영현황 미대응</span></td></tr>`);
-    }
-    if (!rows.length) return '<tr><td colspan="6">보고 기간에 지출된 거래가 없습니다.</td></tr>';
-    return rows.join('');
+    if (!result.details.length) return '<tr><td colspan="5">보고 기간에 지출된 거래가 없습니다.</td></tr>';
+    return result.details.map((tx) => {
+      const month = result.months[tx.monthKey];
+      const status = month?.difference === 0
+        ? '<span class="badge match">월 합계 일치</span>'
+        : `<span class="badge unmatched">월 차이 ${moneyText(month?.difference || 0)}</span>`;
+      const { description, needsReview } = reportDescription(tx, result);
+      const sourceDetail = [tx.merchant, tx.memo].filter(Boolean).join(' · ');
+      const review = needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
+      return `<tr><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${escapeHtml(description)}${review}${sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${status}</td></tr>`;
+    }).join('');
   }
 
   function xmlElements(parent, localName) {
@@ -583,22 +578,33 @@
   function formatNote(report) {
     const items = [];
     if (report.budgetMismatch) items.push(`운영현황 예산 ${moneyCell(report.op.budget)}원 / 장부 예산 ${moneyCell(report.result.budget)}원`);
-    if (report.result.unmatchedAmount) items.push(`미대응 집행 ${moneyCell(report.result.unmatchedAmount)}원 확인 필요`);
+    if (report.result.monthMismatches.length) items.push(`월별 합계 차이 ${report.result.monthMismatches.length}개월 · 차이 합계 ${moneyCell(report.result.monthlyDeviation)}원 확인 필요`);
     if (report.detailMismatch.length) items.push(`운영 상세 금액 불일치 ${report.detailMismatch.length}건`);
     if (report.controlMismatch.length) items.push(`장부 월계 불일치 ${report.controlMismatch.length}개월`);
-    if (!items.length) items.push(`${report.cutoff.year}. ${report.cutoff.month}월 말 누계`);
+    if (!items.length) items.push(`${report.cutoff.year}. ${report.cutoff.month}월 말 누계 · 날짜는 집행엑셀 기준`);
     return items.join(' · ');
+  }
+
+  function reportDescription(tx, result) {
+    const matched = tx.matchedOperation;
+    const matchedProgram = cleanText(matched?.activity || matched?.group);
+    const monthPrograms = [...new Set(result.opThroughPeriod
+      .filter((op) => monthKey(op.date) === tx.monthKey)
+      .map((op) => cleanText(op.activity || op.group))
+      .filter(Boolean))];
+    const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
+    return { description: `${program} 재료`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
   function reportDetails(report) {
     const { result } = report;
     return result.details.map((tx) => {
-      const op = tx.operation;
-      const activity = op?.activity || op?.group || '';
-      const description = [tx.memo, activity ? `활동: ${activity}` : ''].filter(Boolean).join(' · ') || tx.merchant || '운영현황 지출';
-      const status = op
-        ? (tx.dateDifference === 0 ? '운영일·금액 일치' : `금액 일치 · 활동일 ${dateText(op.date)} (${Math.abs(tx.dateDifference)}일 차이)`)
-        : '운영현황 미확인 · 확인 필요';
+      const month = result.months[tx.monthKey];
+      let status = month?.difference === 0
+        ? `${tx.monthKey} 월별 합계 일치`
+        : `${tx.monthKey} 월별 합계 차이 ${moneyCell(month?.difference || 0)}원 확인`;
+      const { description, needsReview } = reportDescription(tx, result);
+      if (needsReview) status += ' · 프로그램명 확인 필요';
       return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note: status };
     });
   }
