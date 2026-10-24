@@ -35,6 +35,13 @@
   const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
+  function normalizeSavedDetailNotes(notes) {
+    return Object.fromEntries(Object.entries(notes || {}).map(([id, note]) => [
+      id,
+      String(note ?? '').replace(/^(?:전문봉사단|가족봉사단)\s+/, ''),
+    ]));
+  }
+
   function openWorkDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -583,7 +590,7 @@
           controlMismatch,
           cutoff,
           detailSuffixes: savedState?.detailSuffixes || {},
-          detailNotes: savedState?.detailNotes || {},
+          detailNotes: normalizeSavedDetailNotes(savedState?.detailNotes),
           checkedDetailIds: savedState?.checkedDetailIds || [],
           noteKind: savedState?.noteKind || '',
           noteSubgroup: savedState?.noteSubgroup || '',
@@ -659,7 +666,7 @@
       const card = button.closest('.program-card');
       const selectedIds = Array.from(card.querySelectorAll('[data-detail-check]:checked')).map((input) => input.dataset.detailCheck);
       if (!selectedIds.length || !report.noteKind || !report.noteSubgroup) return;
-      const note = `${report.noteKind} ${report.noteSubgroup}`;
+      const note = report.noteSubgroup;
       report.detailNotes ||= {};
       selectedIds.forEach((id) => { report.detailNotes[id] = note; });
       setStatus(`체크한 지출내역 ${selectedIds.length}건의 비고에 ‘${note}’를 적용했습니다.`, 'busy');
