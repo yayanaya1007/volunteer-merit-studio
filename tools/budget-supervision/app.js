@@ -523,7 +523,7 @@
   function buildAlerts(report) {
     const { op, result, budgetMismatch, detailMismatch, controlMismatch } = report;
     const alerts = [];
-    if (budgetMismatch) alerts.push({ type: 'warn', text: `예산액이 서로 다릅니다. ${op.budget.toLocaleString()}원(운영현황) · ${result.budget.toLocaleString()}원(집행장부). HWPX 예산액은 장부 기준으로 넣고 차이를 비고에 남깁니다.` });
+    if (budgetMismatch) alerts.push({ type: 'warn', text: `예산액이 서로 다릅니다. ${op.budget.toLocaleString()}원(운영현황) · ${result.budget.toLocaleString()}원(집행장부). HWPX 예산액은 장부 기준으로 넣습니다.` });
     else if (result.budget) alerts.push({ type: 'good', text: `예산액 확인: 운영현황 ${op.budget ? moneyText(op.budget) : '미기재'} · 집행장부 ${moneyText(result.budget)}.` });
     if (result.monthMismatches.length) alerts.push({ type: 'warn', text: `월별 합계가 다른 달이 ${result.monthMismatches.length}개월입니다: ${result.monthMismatches.map(([key, month]) => `${key} 운영 ${moneyText(month.operationAmount)} / 집행 ${moneyText(month.amount)} (차이 ${moneyText(month.difference)})`).join(' · ')}.` });
     else if (Object.keys(result.months).length) alerts.push({ type: 'good', text: '보고 기간의 운영현황과 집행엑셀 월별 합계가 모두 일치합니다. 날짜는 대조 기준에 사용하지 않았습니다.' });
@@ -600,16 +600,6 @@
     return true;
   }
 
-  function formatNote(report) {
-    const items = [];
-    if (report.budgetMismatch) items.push(`운영현황 예산 ${moneyCell(report.op.budget)}원 / 장부 예산 ${moneyCell(report.result.budget)}원`);
-    if (report.result.monthMismatches.length) items.push(`월별 합계 차이 ${report.result.monthMismatches.length}개월 · 차이 합계 ${moneyCell(report.result.monthlyDeviation)}원 확인 필요`);
-    if (report.detailMismatch.length) items.push(`운영 상세 금액 불일치 ${report.detailMismatch.length}건`);
-    if (report.controlMismatch.length) items.push(`장부 월계 불일치 ${report.controlMismatch.length}개월`);
-    if (!items.length) items.push(`${report.cutoff.year}. ${report.cutoff.month}월 말 누계 · 날짜는 집행엑셀 기준`);
-    return items.join(' · ');
-  }
-
   function reportDescription(tx, result, suffix) {
     const matched = tx.matchedOperation;
     const matchedProgram = cleanText(matched?.activity || matched?.group);
@@ -625,13 +615,8 @@
   function reportDetails(report) {
     const { result } = report;
     return result.details.map((tx) => {
-      const month = result.months[tx.monthKey];
-      let status = month?.difference === 0
-        ? `${tx.monthKey} 월별 합계 일치`
-        : `${tx.monthKey} 월별 합계 차이 ${moneyCell(month?.difference || 0)}원 확인`;
-      const { description, needsReview } = reportDescription(tx, result, report.detailSuffixes?.[tx.id]);
-      if (needsReview) status += ' · 프로그램명 확인 필요';
-      return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note: status };
+      const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id]);
+      return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note: '' };
     });
   }
 
@@ -664,7 +649,7 @@
     if (summaryCells.length >= 3) {
       setCellText(doc, summaryCells[0], moneyCell(report.result.budget));
       setCellText(doc, summaryCells[1], moneyCell(report.result.total));
-      setCellText(doc, summaryCells[2], formatNote(report));
+      setCellText(doc, summaryCells[2], '');
     }
 
     const detailTable = tables[1];
