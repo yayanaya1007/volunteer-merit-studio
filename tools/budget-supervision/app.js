@@ -588,16 +588,52 @@
         itemsByTransaction.set(transactions[0].id, items);
         continue;
       }
-      if (transactions.length !== items.length) continue;
-      const remaining = items.slice();
-      const matches = [];
-      for (const tx of transactions) {
-        const index = remaining.findIndex((item) => item.amount === tx.amount);
-        if (index < 0) break;
-        matches.push([tx.id, remaining.splice(index, 1)[0]]);
+      if (transactions.length === items.length) {
+        const remaining = items.slice();
+        const matches = [];
+        for (const tx of transactions) {
+          const index = remaining.findIndex((item) => item.amount === tx.amount);
+          if (index < 0) break;
+          matches.push([tx.id, remaining.splice(index, 1)[0]]);
+        }
+        if (matches.length === transactions.length && remaining.length === 0) {
+          matches.forEach(([id, item]) => itemsByTransaction.set(id, [item]));
+          continue;
+        }
       }
-      if (matches.length === transactions.length && remaining.length === 0) {
-        matches.forEach(([id, item]) => itemsByTransaction.set(id, [item]));
+      if (items.length > 20 || transactions.length > items.length) continue;
+      const orderedTransactions = transactions.slice().sort((a, b) => b.amount - a.amount || a.rowNumber - b.rowNumber);
+      const assignments = new Map();
+      const visited = new Set();
+      const assignItems = (transactionIndex, remaining) => {
+        if (transactionIndex === orderedTransactions.length) return remaining.length === 0;
+        const key = `${transactionIndex}:${remaining.map((item) => item.itemIndex).join(',')}`;
+        if (visited.has(key)) return false;
+        const tx = orderedTransactions[transactionIndex];
+        const picked = [];
+        const chooseSubset = (start, total) => {
+          if (total === tx.amount) {
+            const pickedIndexes = new Set(picked.map((item) => item.itemIndex));
+            assignments.set(tx.id, picked.slice().sort((a, b) => a.itemIndex - b.itemIndex));
+            const rest = remaining.filter((item) => !pickedIndexes.has(item.itemIndex));
+            if (assignItems(transactionIndex + 1, rest)) return true;
+            assignments.delete(tx.id);
+            return false;
+          }
+          if (total > tx.amount) return false;
+          for (let index = start; index < remaining.length; index += 1) {
+            picked.push(remaining[index]);
+            if (chooseSubset(index + 1, total + remaining[index].amount)) return true;
+            picked.pop();
+          }
+          return false;
+        };
+        if (chooseSubset(0, 0)) return true;
+        visited.add(key);
+        return false;
+      };
+      if (assignItems(0, items)) {
+        for (const [id, assignedItems] of assignments) itemsByTransaction.set(id, assignedItems);
       }
     }
     return itemsByTransaction;
