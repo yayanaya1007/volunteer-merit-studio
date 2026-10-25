@@ -1006,16 +1006,10 @@
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
     const automaticPhrase = automaticExpensePhrase(tx, itemLabel);
     if (itemLabel) {
-      const safeItemLabel = removePurchaseSourceNames(itemLabel, tx.merchant);
-      const suffixText = cleanText(suffix || '');
-      const suffixPhrase = suffixText.startsWith(`${itemLabel} `) ? suffixText.slice(itemLabel.length).trim() : suffixText;
-      const automaticAction = (automaticPhrase === '배너 제작' && normalize(safeItemLabel).includes('배너'))
-        || (automaticPhrase === '현수막 제작' && normalize(safeItemLabel).includes('현수막'))
-        ? '제작'
-        : automaticPhrase;
-      const action = itemAction || suffixPhrase || automaticAction;
+      const suffixPhrase = cleanText(suffix || '');
+      const action = itemAction || suffixPhrase || automaticPhrase;
       return {
-        description: [program, safeItemLabel, action].filter(Boolean).join(' '),
+        description: [program, action].filter(Boolean).join(' '),
         needsReview: !matchedProgram && monthPrograms.length !== 1,
       };
     }
