@@ -520,6 +520,38 @@
     return { transactions: txs, details, opThroughPeriod, operationAmounts, months, monthMismatches, monthlyDeviation, cutoffDate, budget: ledger.budget };
   }
 
+  function itemizedLedgerItems(result) {
+    const matchedByOperation = new Map();
+    for (const tx of result.details) {
+      const operation = tx.matchedOperation;
+      if (!operation) continue;
+      if (!matchedByOperation.has(operation.id)) matchedByOperation.set(operation.id, { operation, transactions: [] });
+      matchedByOperation.get(operation.id).transactions.push(tx);
+    }
+    const itemsByTransaction = new Map();
+    for (const { operation, transactions } of matchedByOperation.values()) {
+      const items = operation.items || [];
+      const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
+      if (items.length < 2 || itemTotal !== operation.amount) continue;
+      if (transactions.length === 1 && transactions[0].amount === itemTotal) {
+        itemsByTransaction.set(transactions[0].id, items);
+        continue;
+      }
+      if (transactions.length !== items.length) continue;
+      const remaining = items.slice();
+      const matches = [];
+      for (const tx of transactions) {
+        const index = remaining.findIndex((item) => item.amount === tx.amount);
+        if (index < 0) break;
+        matches.push([tx.id, remaining.splice(index, 1)[0]]);
+      }
+      if (matches.length === transactions.length && remaining.length === 0) {
+        matches.forEach(([id, item]) => itemsByTransaction.set(id, [item]));
+      }
+    }
+    return itemsByTransaction;
+  }
+
   function determineKind(op, ledger, opFile, ledgerFile) {
     return op.kind || ledger.kind || kindFromText(`${opFile.name} ${ledgerFile.name}`) || 'other';
   }
@@ -761,17 +793,24 @@
     const { result } = report;
     if (!result.details.length) return '<tr><td colspan="7">보고 기간에 지출된 거래가 없습니다.</td></tr>';
     const selectedIds = new Set(report.checkedDetailIds || []);
+    const itemized = itemizedLedgerItems(result);
     return result.details.map((tx) => {
       const month = result.months[tx.monthKey];
       const status = month?.difference === 0
         ? '<span class="badge match">월 합계 일치</span>'
         : `<span class="badge unmatched">월 차이 ${moneyText(month?.difference || 0)}</span>`;
       const suffix = report.detailSuffixes?.[tx.id];
-      const { description, needsReview } = reportDescription(tx, result, suffix);
+      const items = itemized.get(tx.id);
+      const lines = items?.length ? items : [{ label: '', amount: tx.amount }];
       const sourceDetail = [tx.merchant, tx.memo].filter(Boolean).join(' · ');
-      const review = needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
       const checked = selectedIds.has(tx.id) ? ' checked' : '';
-      return `<tr><td><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${escapeHtml(description)}${review}${sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${escapeHtml(report.detailNotes?.[tx.id] || '')}</td><td>${status}</td></tr>`;
+      return lines.map((item, lineIndex) => {
+        const descriptionInfo = reportDescription(tx, result, suffix, item.label);
+        const review = descriptionInfo.needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
+        const sharedCells = lineIndex === 0;
+        const rowspan = lines.length > 1 ? ` rowspan="${lines.length}"` : '';
+        return `<tr>${sharedCells ? `<td${rowspan}><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td${rowspan}>${escapeHtml(dateText(tx.date))}</td>` : ''}<td class="num">${moneyText(item.amount)}</td><td>${escapeHtml(descriptionInfo.description)}${review}${sharedCells && sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td>${sharedCells ? `<td${rowspan}><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td${rowspan}>${escapeHtml(report.detailNotes?.[tx.id] || '')}</td><td${rowspan}>${status}</td>` : ''}</tr>`;
+      }).join('');
     }).join('');
   }
 
@@ -823,7 +862,7 @@
     return true;
   }
 
-  function reportDescription(tx, result, suffix) {
+  function reportDescription(tx, result, suffix, itemLabel = '') {
     const matched = tx.matchedOperation;
     const matchedProgram = cleanText(matched?.activity || matched?.group);
     const monthPrograms = [...new Set(result.opThroughPeriod
@@ -831,17 +870,23 @@
       .map((op) => cleanText(op.activity || op.group))
       .filter(Boolean))];
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
+    if (itemLabel) {
+      return suffix
+        ? { description: `${program} ${suffix} (${itemLabel})`, needsReview: !matchedProgram && monthPrograms.length !== 1 }
+        : { description: itemLabel, needsReview: false };
+    }
     if (!suffix) return { description: tx.memo || tx.merchant || '집행엑셀 지출', needsReview: false };
     return { description: `${program} ${suffix}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
   function reportDetails(report) {
     const { result } = report;
-    return result.details.map((tx) => {
-      const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id]);
+    const itemized = itemizedLedgerItems(result);
+    return result.details.flatMap((tx) => (itemized.get(tx.id) || [{ label: '', amount: tx.amount }]).map((item) => {
+      const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id], item.label);
       const note = report.detailNotes?.[tx.id] || '';
-      return { date: tx.date, amount: tx.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note };
-    });
+      return { date: tx.date, amount: item.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note };
+    }));
   }
 
   function appendTextToCell(doc, cell, text) {
