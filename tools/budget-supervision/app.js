@@ -1009,7 +1009,8 @@
   }
 
   function operationName(operation) {
-    return cleanText(operation?.activity);
+    const activity = cleanText(operation?.activity);
+    return /^수세미뜨기(?:및나눔)?$/.test(normalize(activity)) ? '수세미뜨기' : activity;
   }
 
   function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '') {
