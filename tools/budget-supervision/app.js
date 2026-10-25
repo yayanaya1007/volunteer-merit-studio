@@ -113,6 +113,7 @@
         reportStates: reports.map((report) => ({
           kind: report.kind,
           detailSuffixes: report.detailSuffixes || {},
+          detailItemActions: report.detailItemActions || {},
           detailNotes: report.detailNotes || {},
           checkedDetailIds: report.checkedDetailIds || [],
           noteKind: report.noteKind || '',
@@ -530,7 +531,7 @@
     }
     const itemsByTransaction = new Map();
     for (const { operation, transactions } of matchedByOperation.values()) {
-      const items = operation.items || [];
+      const items = (operation.items || []).map((item, itemIndex) => ({ ...item, itemIndex }));
       const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
       if (items.length < 2 || itemTotal !== operation.amount) continue;
       if (transactions.length === 1 && transactions[0].amount === itemTotal) {
@@ -622,6 +623,7 @@
           controlMismatch,
           cutoff,
           detailSuffixes: savedState?.detailSuffixes || {},
+          detailItemActions: savedState?.detailItemActions || {},
           detailNotes: normalizeSavedDetailNotes(savedState?.detailNotes),
           checkedDetailIds: savedState?.checkedDetailIds || [],
           noteKind: savedState?.noteKind || '',
@@ -676,6 +678,13 @@
       setStatus(`체크한 지출내역 ${selectedIds.length}건에 ‘${select.value}’ 문구를 적용했습니다.`, 'busy');
       renderReports();
       programResults.querySelector(`[data-description-suffix="${select.dataset.descriptionSuffix}"]`)?.focus();
+    }));
+    programResults.querySelectorAll('[data-item-action]').forEach((select) => select.addEventListener('change', () => {
+      const report = reports[Number(select.dataset.reportIndex)];
+      if (!report) return;
+      report.detailItemActions ||= {};
+      report.detailItemActions[select.dataset.itemAction] = select.value;
+      renderReports();
     }));
     programResults.querySelectorAll('[data-note-kind]').forEach((select) => select.addEventListener('change', () => {
       const report = reports[Number(select.dataset.noteKind)];
@@ -805,11 +814,14 @@
       const sourceDetail = [tx.merchant, tx.memo].filter(Boolean).join(' · ');
       const checked = selectedIds.has(tx.id) ? ' checked' : '';
       return lines.map((item, lineIndex) => {
-        const descriptionInfo = reportDescription(tx, result, suffix, item.label);
+        const itemKey = item.itemIndex == null ? '' : `${tx.id}::${item.itemIndex}`;
+        const itemAction = itemKey ? report.detailItemActions?.[itemKey] || '' : '';
+        const descriptionInfo = reportDescription(tx, result, suffix, item.label, itemAction);
         const review = descriptionInfo.needsReview ? ' <span class="badge unmatched">프로그램명 확인</span>' : '';
+        const itemActionSelect = itemKey ? `<label class="item-action-choice">항목 <select data-item-action="${escapeHtml(itemKey)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(item.label)} 구매 또는 제작 선택"><option value=""${itemAction ? '' : ' selected'}>선택</option><option value="구매"${itemAction === '구매' ? ' selected' : ''}>구매</option><option value="제작"${itemAction === '제작' ? ' selected' : ''}>제작</option></select></label>` : '';
         const sharedCells = lineIndex === 0;
         const rowspan = lines.length > 1 ? ` rowspan="${lines.length}"` : '';
-        return `<tr>${sharedCells ? `<td${rowspan}><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td${rowspan}>${escapeHtml(dateText(tx.date))}</td>` : ''}<td class="num">${moneyText(item.amount)}</td><td>${escapeHtml(descriptionInfo.description)}${review}${sharedCells && sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td>${sharedCells ? `<td${rowspan}><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td${rowspan}>${escapeHtml(report.detailNotes?.[tx.id] || '')}</td><td${rowspan}>${status}</td>` : ''}</tr>`;
+        return `<tr>${sharedCells ? `<td${rowspan}><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td${rowspan}>${escapeHtml(dateText(tx.date))}</td>` : ''}<td class="num">${moneyText(item.amount)}</td><td>${escapeHtml(descriptionInfo.description)}${review}${itemActionSelect}${sharedCells && sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td>${sharedCells ? `<td${rowspan}><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td${rowspan}>${escapeHtml(report.detailNotes?.[tx.id] || '')}</td><td${rowspan}>${status}</td>` : ''}</tr>`;
       }).join('');
     }).join('');
   }
@@ -862,7 +874,7 @@
     return true;
   }
 
-  function reportDescription(tx, result, suffix, itemLabel = '') {
+  function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '') {
     const matched = tx.matchedOperation;
     const matchedProgram = cleanText(matched?.activity || matched?.group);
     const monthPrograms = [...new Set(result.opThroughPeriod
@@ -871,6 +883,7 @@
       .filter(Boolean))];
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
     if (itemLabel) {
+      if (itemAction) return { description: `${program} ${itemLabel} ${itemAction}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
       return suffix
         ? { description: `${program} ${suffix} (${itemLabel})`, needsReview: !matchedProgram && monthPrograms.length !== 1 }
         : { description: itemLabel, needsReview: false };
@@ -883,7 +896,8 @@
     const { result } = report;
     const itemized = itemizedLedgerItems(result);
     return result.details.flatMap((tx) => (itemized.get(tx.id) || [{ label: '', amount: tx.amount }]).map((item) => {
-      const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id], item.label);
+      const itemKey = item.itemIndex == null ? '' : `${tx.id}::${item.itemIndex}`;
+      const { description } = reportDescription(tx, result, report.detailSuffixes?.[tx.id], item.label, report.detailItemActions?.[itemKey] || '');
       const note = report.detailNotes?.[tx.id] || '';
       return { date: tx.date, amount: item.amount, description, merchant: tx.merchant || '자료 미확인', method: tx.method || '자료 미확인', note };
     }));
