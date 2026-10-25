@@ -1013,6 +1013,23 @@
     return /^수세미뜨기(?:및나눔)?$/.test(normalize(activity)) ? '수세미뜨기' : activity;
   }
 
+  function formatExpenseDescription(program, phrase, tx, result) {
+    const value = cleanText(phrase);
+    let group = '';
+    if (/^(?:현수막|배너)\s*제작$/.test(value)) {
+      group = cleanText(tx.matchedOperation?.group);
+      if (!group) {
+        const monthGroups = [...new Set(result.opThroughPeriod
+          .filter((op) => monthKey(op.date) === tx.monthKey)
+          .map((op) => cleanText(op.group))
+          .filter(Boolean))];
+        if (monthGroups.length === 1) group = monthGroups[0];
+      }
+    }
+    if (group && normalize(program).includes(normalize(group))) group = '';
+    return [program, group, value].filter(Boolean).join(' ');
+  }
+
   function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '') {
     const matched = tx.matchedOperation;
     const matchedProgram = operationName(matched);
@@ -1028,18 +1045,18 @@
         ? expensePhraseWithItemAction(suffixPhrase || automaticPhrase, itemAction)
         : suffixPhrase || automaticPhrase;
       return {
-        description: [program, action].filter(Boolean).join(' '),
+        description: formatExpenseDescription(program, action, tx, result),
         needsReview: !matchedProgram && monthPrograms.length !== 1,
       };
     }
     if (!suffix) {
       const memo = removePurchaseSourceNames(tx.memo, tx.merchant);
       return {
-        description: automaticPhrase ? `${program} ${automaticPhrase}` : memo || '집행엑셀 지출',
+        description: automaticPhrase ? formatExpenseDescription(program, automaticPhrase, tx, result) : memo || '집행엑셀 지출',
         needsReview: automaticPhrase ? !matchedProgram && monthPrograms.length !== 1 : false,
       };
     }
-    return { description: `${program} ${expensePhraseForProgram(program, suffix)}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
+    return { description: formatExpenseDescription(program, expensePhraseForProgram(program, suffix), tx, result), needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
   function reportDetails(report) {
