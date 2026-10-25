@@ -90,6 +90,17 @@
       .replace(/\s{2,}/g, ' ');
   }
 
+  function expensePhraseForProgram(program, phrase) {
+    const value = cleanText(phrase || '');
+    return normalize(program).includes('활동') ? value.replace(/활동\s*(?=재료)/g, '') : value;
+  }
+
+  function expensePhraseWithItemAction(phrase, itemAction) {
+    const value = cleanText(phrase || '');
+    if (!value) return cleanText(itemAction || '');
+    return value.replace(/(?:구매|제작|지급)$/, cleanText(itemAction || ''));
+  }
+
   function openWorkDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -1004,10 +1015,12 @@
       .map(operationName)
       .filter(Boolean))];
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
-    const automaticPhrase = automaticExpensePhrase(tx, itemLabel);
+    const automaticPhrase = expensePhraseForProgram(program, automaticExpensePhrase(tx, itemLabel));
     if (itemLabel) {
-      const suffixPhrase = cleanText(suffix || '');
-      const action = itemAction || suffixPhrase || automaticPhrase;
+      const suffixPhrase = expensePhraseForProgram(program, suffix);
+      const action = itemAction
+        ? expensePhraseWithItemAction(suffixPhrase || automaticPhrase, itemAction)
+        : suffixPhrase || automaticPhrase;
       return {
         description: [program, action].filter(Boolean).join(' '),
         needsReview: !matchedProgram && monthPrograms.length !== 1,
@@ -1020,7 +1033,7 @@
         needsReview: automaticPhrase ? !matchedProgram && monthPrograms.length !== 1 : false,
       };
     }
-    return { description: `${program} ${suffix}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
+    return { description: `${program} ${expensePhraseForProgram(program, suffix)}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
   function reportDetails(report) {
