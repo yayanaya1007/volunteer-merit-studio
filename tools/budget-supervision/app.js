@@ -204,8 +204,8 @@
       monthInput.value = work.cutoff || '2026-09';
       operationFiles = (work.operationFiles || []).map((file) => new File([file.blob], file.name, { type: file.type || '', lastModified: file.lastModified || Date.now() }));
       ledgerFiles = (work.ledgerFiles || []).map((file) => new File([file.blob], file.name, { type: file.type || '', lastModified: file.lastModified || Date.now() }));
-      renderFileNames(operationFiles, $('operationNames'), '.xls 또는 .xlsx 여러 개 선택');
-      renderFileNames(ledgerFiles, $('ledgerNames'), '.xls 또는 .xlsx 여러 개 선택');
+      renderFileNames(operationFiles, $('operationNames'), '.xls 또는 .xlsx 여러 개 선택', true);
+      renderFileNames(ledgerFiles, $('ledgerNames'), '.xls 또는 .xlsx 여러 개 선택', true);
       saveWorkNameInput.value = work.name || '';
       pendingReportStates = work.reportStates || [];
       await analyze();
@@ -680,8 +680,8 @@
   async function analyze() {
     const token = ++generationToken;
     const cutoff = cutoffValue();
+    resultSection.hidden = true;
     if (!operationFiles.length || !ledgerFiles.length) {
-      resultSection.hidden = true;
       setStatus('운영현황 엑셀과 집행장부를 모두 선택하면 자동 분석합니다.');
       return;
     }
@@ -750,8 +750,13 @@
     statusNode.className = `status${state ? ` ${state}` : ''}`;
   }
 
-  function renderFileNames(inputFiles, node, emptyLabel) {
-    node.textContent = inputFiles.length ? inputFiles.map((file) => file.name).join(' · ') : emptyLabel;
+  function renderFileNames(inputFiles, node, emptyLabel, savedCopy = false) {
+    node.textContent = inputFiles.length ? inputFiles.map((file) => {
+      const modified = Number.isFinite(file.lastModified) && file.lastModified > 0
+        ? new Date(file.lastModified).toLocaleString('ko-KR')
+        : '시각 미확인';
+      return `${file.name} (${savedCopy ? '저장본 · ' : ''}수정 ${modified} · ${file.size.toLocaleString('ko-KR')}바이트)`;
+    }).join(' · ') : emptyLabel;
   }
 
   function escapeHtml(text) {
@@ -1156,14 +1161,20 @@
     }
   }
 
+  operationInput.addEventListener('click', () => { operationInput.value = ''; });
+  ledgerInput.addEventListener('click', () => { ledgerInput.value = ''; });
   operationInput.addEventListener('change', () => {
+    if (!operationInput.files?.length) return;
     currentSavedWorkId = null;
+    pendingReportStates = null;
     operationFiles = Array.from(operationInput.files || []);
     renderFileNames(operationFiles, $('operationNames'), '.xls 또는 .xlsx 여러 개 선택');
     analyze();
   });
   ledgerInput.addEventListener('change', () => {
+    if (!ledgerInput.files?.length) return;
     currentSavedWorkId = null;
+    pendingReportStates = null;
     ledgerFiles = Array.from(ledgerInput.files || []);
     renderFileNames(ledgerFiles, $('ledgerNames'), '.xls 또는 .xlsx 여러 개 선택');
     analyze();

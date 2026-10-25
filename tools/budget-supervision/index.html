@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css?v=20261025-item-edit-fields">
   <script defer src="../../vendor/jszip.min.js"></script>
   <script defer src="../../vendor/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=20261025-contextual-material-wording"></script>
+  <script defer src="app.js?v=20261025-reselect-updated-workbook"></script>
 </head>
 <body>
   <header class="topbar">
@@ -26,12 +26,12 @@
     </section>
 
     <section class="card saved-work-card" aria-labelledby="savedWorkTitle">
-      <div class="section-head"><div class="number number-muted">↻</div><div><h2 id="savedWorkTitle">저장한 작업</h2><p>저장한 엑셀 파일과 적용한 선택 내용을 이 브라우저에서 다시 엽니다. 다른 기기와 공유되지는 않습니다.</p></div></div>
+      <div class="section-head"><div class="number number-muted">↻</div><div><h2 id="savedWorkTitle">저장한 작업</h2><p>저장한 시점의 엑셀 파일과 선택 내용을 이 브라우저에서 다시 엽니다. 수정한 엑셀은 아래에서 파일을 다시 선택해 주세요.</p></div></div>
       <div id="savedWorksList" class="saved-work-list"><p class="saved-work-empty">저장된 작업을 불러오는 중입니다.</p></div>
     </section>
 
     <section class="card upload-card" aria-labelledby="uploadTitle">
-      <div class="section-head"><div class="number">01</div><div><h2 id="uploadTitle">파일을 선택하세요</h2><p>가족봉사단·전문봉사단 운영현황과 각 집행장부 파일을 함께 올리면 사업 종류를 자동으로 구분합니다. 날짜는 집행장부 기준으로 기록합니다.</p></div></div>
+      <div class="section-head"><div class="number">01</div><div><h2 id="uploadTitle">파일을 선택하세요</h2><p>가족봉사단·전문봉사단 운영현황과 각 집행장부 파일을 함께 올리면 사업 종류를 자동으로 구분합니다. 엑셀을 수정했다면 같은 파일이어도 다시 선택하고 아래 수정 시각을 확인해 주세요.</p></div></div>
       <div class="upload-grid">
         <label class="dropzone" for="operationFiles">
           <span class="drop-icon">↥</span><strong>운영현황 엑셀</strong><span>활동일, 운영비, 지출내용, 결제방법을 읽습니다.</span>
