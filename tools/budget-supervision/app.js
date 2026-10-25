@@ -49,6 +49,32 @@
     ]));
   }
 
+  function inferExpensePhrase(text) {
+    const value = normalize(text);
+    if (!value) return '';
+    if (value.includes('배너')) return '배너 제작';
+    if (value.includes('현수막')) return '현수막 제작';
+    if (value.includes('간식') || value.includes('오거리할인매장')) return '활동 간식 구매';
+    if ([
+      '숫돌', '뽁뽁이', '수세미실', '코바늘', '기통석', '에어캡', '사포', '아가한코엄마두코',
+      '아성다이소', '동진종합철물건재', '철물', '웰빙엔라이프', '핀셋',
+    ].some((keyword) => value.includes(normalize(keyword)))) return '활동재료 구매';
+    return '';
+  }
+
+  function automaticExpensePhrase(tx, itemLabel = '') {
+    const itemPhrase = inferExpensePhrase(itemLabel);
+    if (itemPhrase) return itemPhrase;
+    const memoPhrase = inferExpensePhrase(tx.memo);
+    if (memoPhrase) return memoPhrase;
+    const operationItems = tx.matchedOperation?.items || [];
+    const itemPhrases = [...new Set(operationItems.map((item) => inferExpensePhrase(item.label)).filter(Boolean))];
+    if (itemPhrases.length === 1) return itemPhrases[0];
+    const operationDetailPhrase = inferExpensePhrase(tx.matchedOperation?.detail);
+    if (operationItems.length <= 1 && operationDetailPhrase) return operationDetailPhrase;
+    return inferExpensePhrase(tx.merchant);
+  }
+
   function openWorkDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -927,16 +953,26 @@
       .map(operationName)
       .filter(Boolean))];
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
+    const automaticPhrase = automaticExpensePhrase(tx, itemLabel);
     if (itemLabel) {
       const suffixText = cleanText(suffix || '');
       const suffixPhrase = suffixText.startsWith(`${itemLabel} `) ? suffixText.slice(itemLabel.length).trim() : suffixText;
-      const action = itemAction || suffixPhrase;
+      const automaticAction = automaticPhrase === '배너 제작' && normalize(itemLabel).includes('배너')
+        || automaticPhrase === '현수막 제작' && normalize(itemLabel).includes('현수막')
+        ? '제작'
+        : automaticPhrase;
+      const action = itemAction || suffixPhrase || automaticAction;
       return {
         description: [program, itemLabel, action].filter(Boolean).join(' '),
         needsReview: !matchedProgram && monthPrograms.length !== 1,
       };
     }
-    if (!suffix) return { description: tx.memo || tx.merchant || '집행엑셀 지출', needsReview: false };
+    if (!suffix) {
+      return {
+        description: automaticPhrase ? `${program} ${automaticPhrase}` : tx.memo || tx.merchant || '집행엑셀 지출',
+        needsReview: automaticPhrase ? !matchedProgram && monthPrograms.length !== 1 : false,
+      };
+    }
     return { description: `${program} ${suffix}`, needsReview: !matchedProgram && monthPrograms.length !== 1 };
   }
 
