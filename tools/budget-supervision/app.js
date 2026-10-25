@@ -993,7 +993,7 @@
   }
 
   function operationName(operation) {
-    return [...new Set([cleanText(operation?.activity), cleanText(operation?.group)].filter(Boolean))].join(' ');
+    return cleanText(operation?.activity);
   }
 
   function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '') {
