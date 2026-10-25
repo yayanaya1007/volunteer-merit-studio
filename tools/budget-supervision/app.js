@@ -75,6 +75,21 @@
     return inferExpensePhrase(tx.merchant);
   }
 
+  function removePurchaseSourceNames(text, merchant = '') {
+    let value = String(text ?? '');
+    const sourceNames = [...new Set([
+      cleanText(merchant), '오거리할인매장', '아가한코엄마두코', '아성다이소', '동진종합철물건재', '웰빙엔라이프',
+    ].filter(Boolean))];
+    for (const name of sourceNames) {
+      const pattern = name.split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*');
+      if (pattern) value = value.replace(new RegExp(pattern, 'gi'), ' ');
+    }
+    return cleanText(value)
+      .replace(/(?:구매처|거래처|지출처)\s*[:：]?/g, ' ')
+      .replace(/^[\s:：·,，-]+|[\s:：·,，-]+$/g, '')
+      .replace(/\s{2,}/g, ' ');
+  }
+
   function openWorkDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -878,7 +893,7 @@
       return lines.map((item, lineIndex) => {
         const itemKey = item.itemIndex == null ? tx.id : `${tx.id}::${item.itemIndex}`;
         const itemAction = itemKey ? report.detailItemActions?.[itemKey] || '' : '';
-        const descriptionInfo = reportDescription(tx, result, suffix, item.label, itemAction);
+        const descriptionInfo = reportDescription({ ...tx, merchant }, result, suffix, item.label, itemAction);
         const description = Object.prototype.hasOwnProperty.call(report.detailDescriptions || {}, itemKey)
           ? report.detailDescriptions[itemKey]
           : descriptionInfo.description;
@@ -955,21 +970,23 @@
     const program = matchedProgram || (monthPrograms.length === 1 ? monthPrograms[0] : '프로그램명 확인 필요');
     const automaticPhrase = automaticExpensePhrase(tx, itemLabel);
     if (itemLabel) {
+      const safeItemLabel = removePurchaseSourceNames(itemLabel, tx.merchant);
       const suffixText = cleanText(suffix || '');
       const suffixPhrase = suffixText.startsWith(`${itemLabel} `) ? suffixText.slice(itemLabel.length).trim() : suffixText;
-      const automaticAction = automaticPhrase === '배너 제작' && normalize(itemLabel).includes('배너')
-        || automaticPhrase === '현수막 제작' && normalize(itemLabel).includes('현수막')
+      const automaticAction = (automaticPhrase === '배너 제작' && normalize(safeItemLabel).includes('배너'))
+        || (automaticPhrase === '현수막 제작' && normalize(safeItemLabel).includes('현수막'))
         ? '제작'
         : automaticPhrase;
       const action = itemAction || suffixPhrase || automaticAction;
       return {
-        description: [program, itemLabel, action].filter(Boolean).join(' '),
+        description: [program, safeItemLabel, action].filter(Boolean).join(' '),
         needsReview: !matchedProgram && monthPrograms.length !== 1,
       };
     }
     if (!suffix) {
+      const memo = removePurchaseSourceNames(tx.memo, tx.merchant);
       return {
-        description: automaticPhrase ? `${program} ${automaticPhrase}` : tx.memo || tx.merchant || '집행엑셀 지출',
+        description: automaticPhrase ? `${program} ${automaticPhrase}` : memo || '집행엑셀 지출',
         needsReview: automaticPhrase ? !matchedProgram && monthPrograms.length !== 1 : false,
       };
     }
@@ -981,12 +998,13 @@
     const itemized = itemizedLedgerItems(result);
     return result.details.flatMap((tx) => (itemized.get(tx.id) || [{ label: '', amount: tx.amount }]).map((item) => {
       const itemKey = item.itemIndex == null ? tx.id : `${tx.id}::${item.itemIndex}`;
-      const { description: generatedDescription } = reportDescription(tx, result, report.detailSuffixes?.[tx.id], item.label, report.detailItemActions?.[itemKey] || '');
+      const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
+      const { description: generatedDescription } = reportDescription({ ...tx, merchant }, result, report.detailSuffixes?.[tx.id], item.label, report.detailItemActions?.[itemKey] || '');
       const description = Object.prototype.hasOwnProperty.call(report.detailDescriptions || {}, itemKey)
         ? report.detailDescriptions[itemKey]
         : generatedDescription;
       const note = report.detailNotes?.[tx.id] || '';
-      return { date: tx.date, amount: item.amount, description, merchant: report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인', method: tx.method || '자료 미확인', note };
+      return { date: tx.date, amount: item.amount, description, merchant, method: tx.method || '자료 미확인', note };
     }));
   }
 
