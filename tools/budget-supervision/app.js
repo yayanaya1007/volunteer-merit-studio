@@ -1152,7 +1152,7 @@
     const titleP = xmlElements(doc, 'p').find((p) => xmlElements(p, 't').map((t) => t.textContent || '').join('').includes('집행현황 및 내역'));
     if (titleP) {
       const titleNodes = xmlElements(titleP, 't');
-      const mainTitle = `4. ${report.cutoff.year} 사업(프로그램)별 집행현황 및 내역`;
+      const mainTitle = `4. ${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역`;
       const mainTitleNode = titleNodes.find((t) => (t.textContent || '').includes('집행현황 및 내역'));
       const cutoffNode = titleNodes.find((t) => (t.textContent || '').includes('기준'));
       if (mainTitleNode) mainTitleNode.textContent = mainTitle;
@@ -1236,7 +1236,7 @@
     const serialized = new XMLSerializer().serializeToString(doc);
     zip.file('Contents/section0.xml', serialized);
     const previewText = [
-      `4. ${report.cutoff.year} 사업(프로그램)별 집행현황 및 내역(${cutoffLabel})`,
+      `4. ${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역(${cutoffLabel})`,
       `프로그램명 : ${kindLabel(report.kind)}`,
       `예산액 ${moneyCell(report.result.budget)}원 / 집행액 ${moneyCell(report.result.total)}원`,
       ...details.map((item) => `${expenseDateText(item.date)} ${moneyCell(item.amount)} ${item.description} ${item.merchant} ${item.method} ${item.note}`),
