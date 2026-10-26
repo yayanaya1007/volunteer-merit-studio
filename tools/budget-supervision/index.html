@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#142f42">
   <meta name="description" content="운영현황 엑셀과 집행장부를 자동 대조해 지도점검 HWPX를 작성합니다.">
   <title>지도점검표 자동 작성</title>
-  <link rel="stylesheet" href="styles.css?v=20261025-item-edit-fields">
+  <link rel="stylesheet" href="styles.css?v=20261026-ledger-memo">
   <script defer src="../../vendor/jszip.min.js"></script>
   <script defer src="../../vendor/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=20261026-ledger-rows-only"></script>
+  <script defer src="app.js?v=20261026-immutable-ledger-memo"></script>
 </head>
 <body>
   <header class="topbar">
@@ -46,7 +46,7 @@
       </div>
       <div class="options-row">
         <label for="cutoffMonth">보고 기준 월 <input id="cutoffMonth" type="month" value="2026-09"></label>
-        <span class="autofill-note"><span>✓</span> 지출 행 체크 후 적용할 문구 선택</span>
+        <span class="autofill-note"><span>✓</span> 비고를 넣을 지출 행 선택</span>
       </div>
       <div id="status" class="status" role="status" aria-live="polite">운영현황 엑셀과 집행장부를 선택하면 자동 분석합니다.</div>
     </section>
