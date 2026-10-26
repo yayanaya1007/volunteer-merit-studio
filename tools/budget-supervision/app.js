@@ -36,42 +36,6 @@
   const dateText = expenseDateText;
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
-  function normalizeSavedDetailNotes(notes) {
-    return Object.fromEntries(Object.entries(notes || {}).map(([id, note]) => [
-      id,
-      String(note ?? '')
-        .replace(/^(?:전문봉사단|가족봉사단)\s+/, '')
-        .replace(/상환\s*[:：]?\s*[\d,]+\s*원?/g, '상환'),
-    ]));
-  }
-
-  function professionalNoteFromText(text) {
-    const value = normalize(text);
-    if (!value) return '';
-    const matches = [
-      /날세움|칼갈이/.test(value) ? '날세움' : '',
-      /손뜨개/.test(value) ? '손뜨개' : '',
-      /귀건강|귀전문봉사단|이침/.test(value) ? '귀건강' : '',
-    ].filter(Boolean);
-    return matches.length === 1 ? matches[0] : '';
-  }
-
-  function familyNoteFromText(text) {
-    const value = normalize(text);
-    const matches = ['논사니', '월드프랜드', '달보드레', '뚜기']
-      .filter((name) => value.includes(name));
-    return matches.length === 1 ? matches[0] : '';
-  }
-
-  function detailNote(report, tx) {
-    const savedNote = Object.prototype.hasOwnProperty.call(report.detailNotes || {}, tx.id)
-      ? report.detailNotes[tx.id] : null;
-    const inferNote = report.kind === 'professional' ? professionalNoteFromText
-      : report.kind === 'family' ? familyNoteFromText : null;
-    if (!inferNote) return savedNote || '';
-    return savedNote ?? (inferNote(tx.group) || inferNote(tx.memo));
-  }
-
   function openWorkDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -143,10 +107,6 @@
         reportStates: reports.map((report) => ({
           kind: report.kind,
           detailMerchants: report.detailMerchants || {},
-          detailNotes: report.detailNotes || {},
-          checkedDetailIds: report.checkedDetailIds || [],
-          noteKind: report.noteKind || '',
-          noteSubgroup: report.noteSubgroup || '',
         })),
       };
       await workDbRequest('readwrite', (store) => store.put(work));
@@ -679,10 +639,6 @@
           controlMismatch,
           cutoff,
           detailMerchants: savedState?.detailMerchants || {},
-          detailNotes: normalizeSavedDetailNotes(savedState?.detailNotes),
-          checkedDetailIds: savedState?.checkedDetailIds || [],
-          noteKind: savedState?.noteKind || '',
-          noteSubgroup: savedState?.noteSubgroup || '',
         };
       });
       pendingReportStates = null;
@@ -731,70 +687,6 @@
       });
       input.addEventListener('change', () => setStatus('수정한 지출처를 반영했습니다. 작업을 저장하면 수정 내용도 보관됩니다.', 'busy'));
     });
-    programResults.querySelectorAll('[data-note-kind]').forEach((select) => select.addEventListener('change', () => {
-      const report = reports[Number(select.dataset.noteKind)];
-      if (!report) return;
-      report.noteKind = select.value;
-      report.noteSubgroup = '';
-      renderReports();
-      programResults.querySelector(`[data-note-subgroup="${select.dataset.noteKind}"]`)?.focus();
-    }));
-    programResults.querySelectorAll('[data-note-subgroup]').forEach((select) => select.addEventListener('change', () => {
-      const report = reports[Number(select.dataset.noteSubgroup)];
-      if (!report) return;
-      report.noteSubgroup = select.value;
-      renderReports();
-      programResults.querySelector(`[data-note-subgroup="${select.dataset.noteSubgroup}"]`)?.focus();
-    }));
-    programResults.querySelectorAll('[data-apply-note]').forEach((button) => button.addEventListener('click', () => {
-      const report = reports[Number(button.dataset.applyNote)];
-      if (!report) return;
-      const card = button.closest('.program-card');
-      const selectedIds = Array.from(card.querySelectorAll('[data-detail-check]:checked')).map((input) => input.dataset.detailCheck);
-      if (!selectedIds.length || !report.noteKind || !report.noteSubgroup) return;
-      const note = report.noteSubgroup;
-      report.detailNotes ||= {};
-      selectedIds.forEach((id) => { report.detailNotes[id] = note; });
-      setStatus(`체크한 지출내역 ${selectedIds.length}건의 비고에 ‘${note}’를 적용했습니다.`, 'busy');
-      renderReports();
-      programResults.querySelector(`[data-apply-note="${button.dataset.applyNote}"]`)?.focus();
-    }));
-    programResults.querySelectorAll('[data-select-all]').forEach((input) => {
-      const report = reports[Number(input.dataset.selectAll)];
-      const card = input.closest('.program-card');
-      if (!report || !card) return;
-      updateSelectAll(card, report);
-      input.addEventListener('change', () => {
-        report.checkedDetailIds = input.checked ? report.result.details.map((tx) => tx.id) : [];
-        const reportIndex = input.dataset.selectAll;
-        renderReports();
-        programResults.querySelector(`[data-select-all="${reportIndex}"]`)?.focus();
-      });
-    });
-    programResults.querySelectorAll('[data-detail-check]').forEach((input) => input.addEventListener('change', () => {
-      const report = reports[Number(input.dataset.reportIndex)];
-      if (!report) return;
-      const card = input.closest('.program-card');
-      report.checkedDetailIds = Array.from(card.querySelectorAll('[data-detail-check]:checked')).map((item) => item.dataset.detailCheck);
-      updateSelectAll(card, report);
-      updateNoteApply(card, report);
-    }));
-  }
-
-  function updateSelectAll(card, report) {
-    const selectAll = card.querySelector('[data-select-all]');
-    if (!selectAll) return;
-    const total = report.result.details.length;
-    const selected = report.checkedDetailIds?.length || 0;
-    selectAll.disabled = total === 0;
-    selectAll.checked = total > 0 && selected === total;
-    selectAll.indeterminate = selected > 0 && selected < total;
-  }
-
-  function updateNoteApply(card, report) {
-    const button = card.querySelector('[data-apply-note]');
-    if (!button) return;
-    button.disabled = !report.noteKind || !report.noteSubgroup || !(report.checkedDetailIds?.length);
   }
 
   function renderProgram(report, index) {
@@ -806,13 +698,6 @@
     const alerts = buildAlerts(report);
     const monthRows = Object.entries(result.months).filter(([, m]) => m.amount || m.operationAmount || m.control != null);
     const mismatchedMonths = result.monthMismatches.length;
-    const subgroups = report.noteKind === '전문봉사단'
-      ? ['손뜨개', '날세움', '귀건강']
-      : report.noteKind === '가족봉사단'
-        ? ['월드프랜드', '논사니', '달보드레', '뚜기']
-        : [];
-    const subgroupOptions = subgroups.map((name) => `<option value="${escapeHtml(name)}"${report.noteSubgroup === name ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
-    const noteReady = Boolean(report.noteKind && report.noteSubgroup && report.checkedDetailIds?.length);
     return `<article class="program-card">
       <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}">이 사업 HWPX 다운로드</button></div>
       <div class="metrics">
@@ -824,7 +709,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 금액 일치액</th><th>집행장부 지출 합계</th><th>금액 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>장부에 봉사단 이름이 있으면 비고에 표시합니다. 비어 있는 행은 체크 후 분야를 선택해 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 비고 적용 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">집행장부 거래 1건을 한 행으로 표시합니다. 지출금액과 지출내용은 장부 원문 그대로 사용하며, 수정하려면 집행장부 파일을 고쳐 다시 올려 주세요.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4></div><div class="table-wrap"><table class="audit-table"><thead><tr><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">집행장부 거래 1건을 한 행으로 표시합니다. 지출금액과 지출내용은 장부 원문 그대로 사용하며, 비고는 비워 둡니다.</p></div>
     </article>`;
   }
 
@@ -848,8 +733,7 @@
 
   function renderAuditRows(report, reportIndex) {
     const { result } = report;
-    if (!result.details.length) return '<tr><td colspan="8">보고 기간에 지출된 거래가 없습니다.</td></tr>';
-    const selectedIds = new Set(report.checkedDetailIds || []);
+    if (!result.details.length) return '<tr><td colspan="7">보고 기간에 지출된 거래가 없습니다.</td></tr>';
     return result.details.map((tx) => {
       const status = tx.matchedOperation
         ? '<span class="badge match">금액·항목 일치</span>'
@@ -859,8 +743,7 @@
       const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
       const description = `<span class="ledger-memo">${escapeHtml(tx.memo)}</span>${cleanText(tx.memo) ? '' : ' <span class="badge unmatched">장부 적요 확인</span>'}`;
       const merchantEditor = `<input class="description-edit" type="text" data-detail-merchant="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} 지출처 수정" value="${escapeHtml(merchant)}">`;
-      const checked = selectedIds.has(tx.id) ? ' checked' : '';
-      return `<tr><td><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 비고 선택"${checked}></td><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${description}</td><td>${merchantEditor}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td>${escapeHtml(detailNote(report, tx))}</td><td>${status}</td></tr>`;
+      return `<tr><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${description}</td><td>${merchantEditor}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td></td><td>${status}</td></tr>`;
     }).join('');
   }
 
@@ -918,8 +801,7 @@
     const { result } = report;
     return result.details.map((tx) => {
       const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
-      const note = detailNote(report, tx);
-      return { date: tx.date, amount: tx.amount, description: tx.memo, merchant, method: tx.method || '자료 미확인', note };
+      return { date: tx.date, amount: tx.amount, description: tx.memo, merchant, method: tx.method || '자료 미확인', note: '' };
     });
   }
 

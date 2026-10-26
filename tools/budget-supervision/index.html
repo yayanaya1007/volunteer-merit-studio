@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css?v=20261026-ledger-memo">
   <script defer src="../../vendor/jszip.min.js"></script>
   <script defer src="../../vendor/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=20261026-ledger-only-output"></script>
+  <script defer src="app.js?v=20261026-empty-notes"></script>
 </head>
 <body>
   <header class="topbar">
@@ -21,7 +21,7 @@
     <section class="hero">
       <p class="eyebrow">운영현황 + 집행장부 → 거래 항목 대조 → 한글 서식</p>
       <h1>사업비 지출을 대조하고<br>지도점검표를 만드세요</h1>
-      <p class="intro">운영현황은 장부와 금액을 대조하는 데만 사용합니다. 한글 파일의 예산액·집행액·지출일·적요·지출처·결제방법·비고는 집행장부와 화면에서 직접 선택한 값만 사용합니다.</p>
+      <p class="intro">운영현황은 장부와 금액을 대조하는 데만 사용합니다. 한글 파일의 예산액·집행액·지출일·적요·지출처·결제방법은 집행장부 기준이며, 비고는 비워 둡니다.</p>
       <div class="workflow"><span><b>1</b> 운영현황 업로드</span><span class="arrow">→</span><span><b>2</b> 집행장부 업로드</span><span class="arrow">→</span><span><b>3</b> 거래 연결 확인</span><span class="arrow">→</span><span><b>4</b> HWPX 다운로드</span></div>
     </section>
 
@@ -46,7 +46,7 @@
       </div>
       <div class="options-row">
         <label for="cutoffMonth">보고 기준 월 <input id="cutoffMonth" type="month" value="2026-09"></label>
-        <span class="autofill-note"><span>✓</span> 비고를 넣을 지출 행 선택</span>
+        <span class="autofill-note"><span>✓</span> 비고는 입력하지 않습니다</span>
       </div>
       <div id="status" class="status" role="status" aria-live="polite">운영현황 엑셀과 집행장부를 선택하면 자동 분석합니다.</div>
     </section>
