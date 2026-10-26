@@ -1080,6 +1080,45 @@
     setCellText(doc, cell, text);
   }
 
+  function detailRowHeight(item) {
+    const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+    const charsPerLine = [11, 10, 11, 7, 7, 4];
+    const lines = values.map((value, index) => {
+      const width = Array.from(String(value ?? '')).reduce((sum, char) => sum + (/[\x00-\x7f]/.test(char) ? 0.55 : 1), 0);
+      return Math.max(1, Math.ceil(width / charsPerLine[index]));
+    });
+    return Math.max(2897, Math.max(...lines) * 1300 + 500);
+  }
+
+  function detailPages(details) {
+    const pages = [[]];
+    let usedHeight = 3460 + 2614;
+    for (const item of details) {
+      const height = detailRowHeight(item);
+      const limit = pages.length === 1 ? 39000 : 62000;
+      if (pages[pages.length - 1].length && usedHeight + height > limit) {
+        pages.push([]);
+        usedHeight = 3460 + 2614;
+      }
+      pages[pages.length - 1].push({ ...item, rowHeight: height });
+      usedHeight += height;
+    }
+    return pages;
+  }
+
+  function resizeTableToRows(table) {
+    const size = Array.from(table.children).find((child) => child.localName === 'sz');
+    if (!size) return;
+    const height = directRows(table).reduce((sum, row) => {
+      const cellHeights = directCells(row).map((cell) => {
+        const cellSize = Array.from(cell.children).find((child) => child.localName === 'cellSz');
+        return Number(cellSize?.getAttribute('height')) || 0;
+      });
+      return sum + Math.max(0, ...cellHeights);
+    }, 0);
+    size.setAttribute('height', String(height));
+  }
+
   async function createHwpx(report) {
     const response = await fetch(TEMPLATE_URL, { cache: 'no-store' });
     if (!response.ok) throw new Error('원본 HWPX 서식을 읽지 못했습니다. 로컬 웹서버에서 앱을 열어 주세요.');
@@ -1114,47 +1153,46 @@
       setCellText(doc, summaryCells[2], '');
     }
 
-    const detailTable = tables[1];
-    const rows = directRows(detailTable);
-    if (rows.length < 3) throw new Error('원본 HWPX의 세부 지출 표 구조를 확인할 수 없습니다.');
-    const totalCells = directCells(rows[1]);
-    if (totalCells.length >= 2) setCellText(doc, totalCells[1], moneyCell(report.result.total));
-    const entryRows = rows.slice(2);
-    const templateRow = entryRows[entryRows.length - 1];
     const details = reportDetails(report);
-    // Keep the template's first row as the repeating header when HWPX paginates this table.
-    detailTable.setAttribute('repeatHeader', '1');
-    while (entryRows.length < details.length) {
-      const clone = templateRow.cloneNode(true);
-      detailTable.appendChild(clone);
-      entryRows.push(clone);
-    }
-    detailTable.setAttribute('rowCnt', String(directRows(detailTable).length));
-    for (let i = 0; i < entryRows.length; i += 1) {
-      const row = entryRows[i];
-      directCells(row).forEach((cell) => {
-        const address = Array.from(cell.children).find((child) => child.localName === 'cellAddr');
-        if (address) address.setAttribute('rowAddr', String(i + 2));
-      });
-      const item = details[i];
-      const cells = directCells(row);
-      if (!item || cells.length < 6) continue;
-      const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
-      cells.slice(0, 6).forEach((cell, col) => appendTextToCell(doc, cell, values[col]));
-    }
-    // The template stores its table height as the sum of its original five rows.
-    // Extend that height with the cloned rows so they do not overlap visually.
-    const tableSize = Array.from(detailTable.children).find((child) => child.localName === 'sz');
-    if (tableSize) {
-      const height = directRows(detailTable).reduce((sum, row) => {
-        const cellHeights = directCells(row).map((cell) => {
+    const detailTable = tables[1];
+    let detailParagraph = detailTable.parentElement;
+    while (detailParagraph && detailParagraph.localName !== 'p') detailParagraph = detailParagraph.parentElement;
+    if (directRows(detailTable).length < 3 || !detailParagraph) throw new Error('원본 HWPX의 세부 지출 표 구조를 확인할 수 없습니다.');
+    const blankPage = detailParagraph.cloneNode(true);
+    const pages = detailPages(details);
+    let previousParagraph = detailParagraph;
+    pages.forEach((pageItems, pageIndex) => {
+      const paragraph = pageIndex === 0 ? detailParagraph : blankPage.cloneNode(true);
+      if (pageIndex > 0) {
+        paragraph.setAttribute('pageBreak', '1');
+        previousParagraph.parentNode.insertBefore(paragraph, previousParagraph.nextSibling);
+        previousParagraph = paragraph;
+      }
+      xmlElements(paragraph, 'linesegarray').forEach((node) => node.remove());
+      const table = xmlElements(paragraph, 'tbl')[0];
+      if (pageIndex > 0) table.setAttribute('id', String(Number(detailTable.getAttribute('id')) + pageIndex));
+      table.setAttribute('repeatHeader', '1');
+      const rows = directRows(table);
+      const totalCells = directCells(rows[1]);
+      if (totalCells.length >= 2) setCellText(doc, totalCells[1], moneyCell(report.result.total));
+      const templateRow = rows[2];
+      rows.slice(2).forEach((row) => table.removeChild(row));
+      for (const [index, item] of pageItems.entries()) {
+        const row = templateRow.cloneNode(true);
+        table.appendChild(row);
+        const cells = directCells(row);
+        const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+        cells.slice(0, 6).forEach((cell, col) => {
+          const address = Array.from(cell.children).find((child) => child.localName === 'cellAddr');
+          if (address) address.setAttribute('rowAddr', String(index + 2));
           const size = Array.from(cell.children).find((child) => child.localName === 'cellSz');
-          return Number(size?.getAttribute('height')) || 0;
+          if (size) size.setAttribute('height', String(item.rowHeight));
+          appendTextToCell(doc, cell, values[col]);
         });
-        return sum + Math.max(0, ...cellHeights);
-      }, 0);
-      tableSize.setAttribute('height', String(height));
-    }
+      }
+      table.setAttribute('rowCnt', String(directRows(table).length));
+      resizeTableToRows(table);
+    });
 
     const serialized = new XMLSerializer().serializeToString(doc);
     zip.file('Contents/section0.xml', serialized);
