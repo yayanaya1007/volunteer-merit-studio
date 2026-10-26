@@ -61,21 +61,32 @@
     return matches.length === 1 ? matches[0] : '';
   }
 
+  function repaymentAmountFromText(text) {
+    const match = cleanText(text).match(/상환\s*[:：]?\s*([\d,]+)\s*원?/);
+    return match ? money(match[1]) : 0;
+  }
+
   function detailNote(report, tx) {
-    if (Object.prototype.hasOwnProperty.call(report.detailNotes || {}, tx.id)) return report.detailNotes[tx.id];
+    const savedNote = Object.prototype.hasOwnProperty.call(report.detailNotes || {}, tx.id)
+      ? report.detailNotes[tx.id] : null;
     const inferNote = report.kind === 'professional' ? professionalNoteFromText
       : report.kind === 'family' ? familyNoteFromText : null;
-    if (!inferNote) return '';
+    if (!inferNote) return savedNote || '';
     const matched = tx.matchedOperation;
-    const directNote = inferNote(matched?.group)
+    const directNote = inferNote(tx.repaymentGroup)
+      || inferNote(matched?.group)
       || inferNote(matched?.activity)
       || inferNote(tx.memo);
-    if (directNote) return directNote;
-    const monthOperations = report.result.opThroughPeriod
-      .filter((op) => monthKey(op.date) === tx.monthKey);
-    const monthNotes = monthOperations
-      .map((op) => inferNote(op.group) || inferNote(op.activity));
-    return monthNotes.length && monthNotes.every(Boolean) && new Set(monthNotes).size === 1 ? monthNotes[0] : '';
+    let note = savedNote ?? directNote;
+    if (!note) {
+      const monthOperations = report.result.opThroughPeriod
+        .filter((op) => monthKey(op.date) === tx.monthKey);
+      const monthNotes = monthOperations
+        .map((op) => inferNote(op.group) || inferNote(op.activity));
+      note = monthNotes.length && monthNotes.every(Boolean) && new Set(monthNotes).size === 1 ? monthNotes[0] : '';
+    }
+    if (report.kind !== 'family' || !tx.repaymentAmount || /상환\s*[:：]?\s*[\d,]+/.test(note)) return note;
+    return [note, `상환 ${moneyText(tx.repaymentAmount)}`].filter(Boolean).join(' / ');
   }
 
   function normalizeSavedDetailSuffixes(suffixes) {
@@ -90,6 +101,8 @@
     if (!value) return '';
     if (value.includes('배너')) return '배너 제작';
     if (value.includes('현수막')) return '현수막 제작';
+    if (value.includes('재료비지급')) return '활동재료비 지급';
+    if (value.includes('재료구매')) return '활동 재료 구매';
     if (value.includes('간식') || value.includes('오거리할인매장')) return '활동 간식 구매';
     if ([
       '숫돌', '뽁뽁이', '수세미실', '코바늘', '기통석', '에어캡', '사포', '아가한코엄마두코',
@@ -442,6 +455,7 @@
         group,
         place,
         remarks,
+        repaymentAmount: kind === 'family' ? repaymentAmountFromText(remarks) : 0,
         kind,
         sourceFile: file.name,
       });
@@ -585,6 +599,30 @@
       }
     }
     const cutoffDate = new Date(cutoff.year, cutoff.month, 0, 23, 59, 59, 999);
+    if (operation.kind === 'family') {
+      for (const op of operation.entries.filter((entry) => entry.repaymentAmount > 0 && entry.date <= cutoffDate)) {
+        let related = allTransactions.filter((tx) => tx.matchedOperation === op);
+        if (!related.length && op.items.length) {
+          const nearby = allTransactions.filter((tx) => {
+            if (tx.matchedOperation || tx.date > cutoffDate) return false;
+            const daysApart = Math.abs(tx.date - op.date) / 86400000;
+            if (daysApart > 45) return false;
+            return op.items.some((item) => item.amount === tx.amount
+              || (normalize(tx.merchant) && (normalize(item.label).includes(normalize(tx.merchant))
+                || normalize(tx.merchant).includes(normalize(item.label)))));
+          });
+          related = subsetForAmount(nearby, op.amount, op) || [];
+        }
+        if (related.length) {
+          for (const tx of related) {
+            if (!tx.matchedOperation) tx.matchedOperation = op;
+            tx.repaymentGroup = op.group;
+          }
+          const first = related.slice().sort((a, b) => a.date - b.date || a.rowNumber - b.rowNumber)[0];
+          first.repaymentAmount = op.repaymentAmount;
+        }
+      }
+    }
     const txs = allTransactions.filter((tx) => tx.date <= cutoffDate && tx.date.getFullYear() === cutoff.year);
     const opThroughPeriod = operation.entries.filter((op) => op.date.getFullYear() === cutoff.year && op.date <= cutoffDate);
     const total = txs.reduce((sum, tx) => sum + tx.amount, 0);
