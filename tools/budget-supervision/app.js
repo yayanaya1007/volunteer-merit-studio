@@ -33,6 +33,7 @@
   const moneyText = (n) => `${Math.round(n || 0).toLocaleString('ko-KR')}원`;
   const moneyCell = (n) => Math.round(n || 0).toLocaleString('ko-KR');
   const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
+  const hwpxDateText = (date) => date ? `${date.getMonth() + 1}.${date.getDate()}.` : '';
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
   function normalizeSavedDetailNotes(notes) {
@@ -1081,8 +1082,8 @@
   }
 
   function detailRowHeight(item) {
-    const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
-    const charsPerLine = [11, 10, 11, 7, 7, 4];
+    const values = [hwpxDateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+    const charsPerLine = [7, 8, 17, 13, 7, 5];
     const lines = values.map((value, index) => {
       const width = Array.from(String(value ?? '')).reduce((sum, char) => sum + (/[\x00-\x7f]/.test(char) ? 0.55 : 1), 0);
       return Math.max(1, Math.ceil(width / charsPerLine[index]));
@@ -1095,10 +1096,10 @@
     let usedHeight = 3460 + 2614;
     for (const item of details) {
       const height = detailRowHeight(item);
-      const limit = pages.length === 1 ? 25000 : 39000;
+      const limit = pages.length === 1 ? 25000 : 56000;
       if (pages[pages.length - 1].length && usedHeight + height > limit) {
         pages.push([]);
-        usedHeight = 3460 + 2614;
+        usedHeight = 3460;
       }
       pages[pages.length - 1].push({ ...item, rowHeight: height });
       usedHeight += height;
@@ -1117,6 +1118,24 @@
       return sum + Math.max(0, ...cellHeights);
     }, 0);
     size.setAttribute('height', String(height));
+  }
+
+  function setTableWidths(table, widths) {
+    const size = Array.from(table.children).find((child) => child.localName === 'sz');
+    if (size) size.setAttribute('width', String(widths.reduce((sum, width) => sum + width, 0)));
+    table.setAttribute('noAdjust', '0');
+    const position = Array.from(table.children).find((child) => child.localName === 'pos');
+    if (position) position.setAttribute('treatAsChar', '1');
+    directRows(table).forEach((row) => directCells(row).forEach((cell, index) => {
+      const cellSize = Array.from(cell.children).find((child) => child.localName === 'cellSz');
+      if (cellSize && widths[index] != null) cellSize.setAttribute('width', String(widths[index]));
+    }));
+  }
+
+  function alignTableWithTextMargin(paragraph) {
+    const run = Array.from(paragraph.children).find((child) => child.localName === 'run');
+    const leadingText = run && Array.from(run.children).find((child) => child.localName === 't');
+    if (leadingText) leadingText.textContent = '';
   }
 
   async function createHwpx(report) {
@@ -1156,59 +1175,58 @@
         if (paragraph) paragraph.setAttribute('paraPrIDRef', '4');
       });
     }
+    setTableWidths(tables[0], [16989, 16989, 16989]);
+    let summaryParagraph = tables[0].parentElement;
+    while (summaryParagraph && summaryParagraph.localName !== 'p') summaryParagraph = summaryParagraph.parentElement;
+    if (summaryParagraph) alignTableWithTextMargin(summaryParagraph);
 
     const details = reportDetails(report);
     const detailTable = tables[1];
     let detailParagraph = detailTable.parentElement;
     while (detailParagraph && detailParagraph.localName !== 'p') detailParagraph = detailParagraph.parentElement;
     if (directRows(detailTable).length < 3 || !detailParagraph) throw new Error('원본 HWPX의 세부 지출 표 구조를 확인할 수 없습니다.');
-    let summaryParagraph = tables[0].parentElement;
-    while (summaryParagraph && summaryParagraph.localName !== 'p') summaryParagraph = summaryParagraph.parentElement;
-    const sectionParagraphs = Array.from(detailParagraph.parentElement.children).filter((child) => child.localName === 'p');
-    const summaryIndex = sectionParagraphs.indexOf(summaryParagraph);
-    const detailIndex = sectionParagraphs.indexOf(detailParagraph);
-    if (summaryIndex < 2 || detailIndex <= summaryIndex) throw new Error('원본 HWPX의 예산·집행내역 배치를 확인할 수 없습니다.');
-    const continuationBlock = sectionParagraphs.slice(summaryIndex - 2, detailIndex).map((paragraph) => paragraph.cloneNode(true));
     const blankPage = detailParagraph.cloneNode(true);
     const pages = detailPages(details);
     let previousParagraph = detailParagraph;
     pages.forEach((pageItems, pageIndex) => {
       const paragraph = pageIndex === 0 ? detailParagraph : blankPage.cloneNode(true);
       if (pageIndex > 0) {
-        continuationBlock.forEach((source, blockIndex) => {
-          const repeated = source.cloneNode(true);
-          if (blockIndex === 0) repeated.setAttribute('pageBreak', '1');
-          xmlElements(repeated, 'linesegarray').forEach((node) => node.remove());
-          const repeatedSummary = xmlElements(repeated, 'tbl')[0];
-          if (repeatedSummary) repeatedSummary.setAttribute('id', String(2000000000 + pageIndex * 2));
-          previousParagraph.parentNode.insertBefore(repeated, previousParagraph.nextSibling);
-          previousParagraph = repeated;
-        });
+        paragraph.setAttribute('pageBreak', '1');
         previousParagraph.parentNode.insertBefore(paragraph, previousParagraph.nextSibling);
         previousParagraph = paragraph;
       }
+      alignTableWithTextMargin(paragraph);
       xmlElements(paragraph, 'linesegarray').forEach((node) => node.remove());
       const table = xmlElements(paragraph, 'tbl')[0];
-      if (pageIndex > 0) table.setAttribute('id', String(2000000001 + pageIndex * 2));
+      if (pageIndex > 0) table.setAttribute('id', String(2000000000 + pageIndex));
+      setTableWidths(table, [5102, 5669, 15874, 12756, 6236, 5330]);
       table.setAttribute('repeatHeader', '1');
       const rows = directRows(table);
-      const totalCells = directCells(rows[1]);
-      if (totalCells.length >= 2) setCellText(doc, totalCells[1], moneyCell(report.result.total));
+      if (pageIndex === 0) {
+        const totalCells = directCells(rows[1]);
+        if (totalCells.length >= 2) {
+          setCellText(doc, totalCells[1], moneyCell(report.result.total));
+          xmlElements(totalCells[1], 'run').forEach((run) => run.setAttribute('charPrIDRef', '24'));
+        }
+      } else {
+        table.removeChild(rows[1]);
+      }
       const templateRow = rows[2];
       rows.slice(2).forEach((row) => table.removeChild(row));
       for (const [index, item] of pageItems.entries()) {
         const row = templateRow.cloneNode(true);
         table.appendChild(row);
         const cells = directCells(row);
-        const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+        const values = [hwpxDateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
         cells.slice(0, 6).forEach((cell, col) => {
           const address = Array.from(cell.children).find((child) => child.localName === 'cellAddr');
-          if (address) address.setAttribute('rowAddr', String(index + 2));
+          if (address) address.setAttribute('rowAddr', String(index + (pageIndex === 0 ? 2 : 1)));
           const size = Array.from(cell.children).find((child) => child.localName === 'cellSz');
           if (size) size.setAttribute('height', String(item.rowHeight));
           appendTextToCell(doc, cell, values[col]);
+          if (col === 1) xmlElements(cell, 'run').forEach((run) => run.setAttribute('charPrIDRef', '24'));
           const cellParagraph = xmlElements(cell, 'p')[0];
-          if (cellParagraph) cellParagraph.setAttribute('paraPrIDRef', '27');
+          if (cellParagraph) cellParagraph.setAttribute('paraPrIDRef', '4');
         });
       }
       table.setAttribute('rowCnt', String(directRows(table).length));
@@ -1221,7 +1239,7 @@
       `${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역 (${cutoffLabel})`,
       `프로그램명 : ${kindLabel(report.kind)}`,
       `예산액 ${moneyCell(report.result.budget)}원 / 집행액 ${moneyCell(report.result.total)}원`,
-      ...details.map((item) => `${dateText(item.date)} ${moneyCell(item.amount)} ${item.description} ${item.merchant} ${item.method} ${item.note}`),
+      ...details.map((item) => `${hwpxDateText(item.date)} ${moneyCell(item.amount)} ${item.description} ${item.merchant} ${item.method} ${item.note}`),
     ].join('\n');
     if (zip.file('Preview/PrvText.txt')) zip.file('Preview/PrvText.txt', previewText);
     return zip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip', compression: 'DEFLATE', compressionOptions: { level: 6 } });
