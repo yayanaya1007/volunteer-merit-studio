@@ -32,8 +32,7 @@
   };
   const moneyText = (n) => `${Math.round(n || 0).toLocaleString('ko-KR')}원`;
   const moneyCell = (n) => Math.round(n || 0).toLocaleString('ko-KR');
-  const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
-  const hwpxDateText = (date) => date ? `${date.getMonth() + 1}.${date.getDate()}.` : '';
+  const dateText = (date) => date ? `${date.getMonth() + 1}.${date.getDate()}.` : '';
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
   function normalizeSavedDetailNotes(notes) {
@@ -1082,7 +1081,7 @@
   }
 
   function detailRowHeight(item) {
-    const values = [hwpxDateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+    const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
     const charsPerLine = [7, 8, 17, 13, 7, 5];
     const lines = values.map((value, index) => {
       const width = Array.from(String(value ?? '')).reduce((sum, char) => sum + (/[\x00-\x7f]/.test(char) ? 0.55 : 1), 0);
@@ -1217,7 +1216,7 @@
         const row = templateRow.cloneNode(true);
         table.appendChild(row);
         const cells = directCells(row);
-        const values = [hwpxDateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
+        const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
         cells.slice(0, 6).forEach((cell, col) => {
           const address = Array.from(cell.children).find((child) => child.localName === 'cellAddr');
           if (address) address.setAttribute('rowAddr', String(index + (pageIndex === 0 ? 2 : 1)));
@@ -1239,7 +1238,7 @@
       `${report.cutoff.year}년 사업(프로그램)별 집행현황 및 내역 (${cutoffLabel})`,
       `프로그램명 : ${kindLabel(report.kind)}`,
       `예산액 ${moneyCell(report.result.budget)}원 / 집행액 ${moneyCell(report.result.total)}원`,
-      ...details.map((item) => `${hwpxDateText(item.date)} ${moneyCell(item.amount)} ${item.description} ${item.merchant} ${item.method} ${item.note}`),
+      ...details.map((item) => `${dateText(item.date)} ${moneyCell(item.amount)} ${item.description} ${item.merchant} ${item.method} ${item.note}`),
     ].join('\n');
     if (zip.file('Preview/PrvText.txt')) zip.file('Preview/PrvText.txt', previewText);
     return zip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip', compression: 'DEFLATE', compressionOptions: { level: 6 } });
