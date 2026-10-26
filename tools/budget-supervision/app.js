@@ -1095,7 +1095,7 @@
     let usedHeight = 3460 + 2614;
     for (const item of details) {
       const height = detailRowHeight(item);
-      const limit = pages.length === 1 ? 39000 : 62000;
+      const limit = pages.length === 1 ? 25000 : 39000;
       if (pages[pages.length - 1].length && usedHeight + height > limit) {
         pages.push([]);
         usedHeight = 3460 + 2614;
@@ -1151,6 +1151,10 @@
       setCellText(doc, summaryCells[0], moneyCell(report.result.budget));
       setCellText(doc, summaryCells[1], moneyCell(report.result.total));
       setCellText(doc, summaryCells[2], '');
+      summaryCells.slice(0, 2).forEach((cell) => {
+        const paragraph = xmlElements(cell, 'p')[0];
+        if (paragraph) paragraph.setAttribute('paraPrIDRef', '4');
+      });
     }
 
     const details = reportDetails(report);
@@ -1158,19 +1162,34 @@
     let detailParagraph = detailTable.parentElement;
     while (detailParagraph && detailParagraph.localName !== 'p') detailParagraph = detailParagraph.parentElement;
     if (directRows(detailTable).length < 3 || !detailParagraph) throw new Error('원본 HWPX의 세부 지출 표 구조를 확인할 수 없습니다.');
+    let summaryParagraph = tables[0].parentElement;
+    while (summaryParagraph && summaryParagraph.localName !== 'p') summaryParagraph = summaryParagraph.parentElement;
+    const sectionParagraphs = Array.from(detailParagraph.parentElement.children).filter((child) => child.localName === 'p');
+    const summaryIndex = sectionParagraphs.indexOf(summaryParagraph);
+    const detailIndex = sectionParagraphs.indexOf(detailParagraph);
+    if (summaryIndex < 2 || detailIndex <= summaryIndex) throw new Error('원본 HWPX의 예산·집행내역 배치를 확인할 수 없습니다.');
+    const continuationBlock = sectionParagraphs.slice(summaryIndex - 2, detailIndex).map((paragraph) => paragraph.cloneNode(true));
     const blankPage = detailParagraph.cloneNode(true);
     const pages = detailPages(details);
     let previousParagraph = detailParagraph;
     pages.forEach((pageItems, pageIndex) => {
       const paragraph = pageIndex === 0 ? detailParagraph : blankPage.cloneNode(true);
       if (pageIndex > 0) {
-        paragraph.setAttribute('pageBreak', '1');
+        continuationBlock.forEach((source, blockIndex) => {
+          const repeated = source.cloneNode(true);
+          if (blockIndex === 0) repeated.setAttribute('pageBreak', '1');
+          xmlElements(repeated, 'linesegarray').forEach((node) => node.remove());
+          const repeatedSummary = xmlElements(repeated, 'tbl')[0];
+          if (repeatedSummary) repeatedSummary.setAttribute('id', String(2000000000 + pageIndex * 2));
+          previousParagraph.parentNode.insertBefore(repeated, previousParagraph.nextSibling);
+          previousParagraph = repeated;
+        });
         previousParagraph.parentNode.insertBefore(paragraph, previousParagraph.nextSibling);
         previousParagraph = paragraph;
       }
       xmlElements(paragraph, 'linesegarray').forEach((node) => node.remove());
       const table = xmlElements(paragraph, 'tbl')[0];
-      if (pageIndex > 0) table.setAttribute('id', String(Number(detailTable.getAttribute('id')) + pageIndex));
+      if (pageIndex > 0) table.setAttribute('id', String(2000000001 + pageIndex * 2));
       table.setAttribute('repeatHeader', '1');
       const rows = directRows(table);
       const totalCells = directCells(rows[1]);
@@ -1188,6 +1207,8 @@
           const size = Array.from(cell.children).find((child) => child.localName === 'cellSz');
           if (size) size.setAttribute('height', String(item.rowHeight));
           appendTextToCell(doc, cell, values[col]);
+          const cellParagraph = xmlElements(cell, 'p')[0];
+          if (cellParagraph) cellParagraph.setAttribute('paraPrIDRef', '27');
         });
       }
       table.setAttribute('rowCnt', String(directRows(table).length));
