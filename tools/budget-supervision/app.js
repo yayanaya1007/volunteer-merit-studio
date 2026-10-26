@@ -1006,6 +1006,7 @@
         : [];
     const subgroupOptions = subgroups.map((name) => `<option value="${escapeHtml(name)}"${report.noteSubgroup === name ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
     const noteReady = Boolean(report.noteKind && report.noteSubgroup && report.checkedDetailIds?.length);
+    const descriptionPrefix = kind === 'family' ? '가족봉사단' : '프로그램명';
     return `<article class="program-card">
       <div class="program-card-head"><div><div class="program-title"><span class="number">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(kindLabel(kind))}</h3></div><div class="sheet-info">운영현황: ${escapeHtml(op.sourceFile)} · ${escapeHtml(op.sheetName)}<br>집행장부: ${escapeHtml(ledger.sourceFile)} · ${escapeHtml(ledger.sheetName)}</div></div><button class="button download-one" type="button" data-download="${index}">이 사업 HWPX 다운로드</button></div>
       <div class="metrics">
@@ -1017,7 +1018,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 금액 일치액</th><th>집행장부 지출 합계</th><th>금액 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="활동 재료 구매">프로그램명 활동 재료 구매</option><option value="활동재료비 지급">프로그램명 활동재료비 지급</option><option value="간식 구매">프로그램명 간식 구매</option><option value="배너 제작">프로그램명 배너 제작</option><option value="현수막 제작">프로그램명 현수막 제작</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">체크한 행에는 위 메뉴의 문구를 적용할 수 있습니다. 품목별로 구매 또는 제작을 고르고, 지출내용·지출처 칸을 직접 클릭해 수정할 수 있습니다.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="활동 재료 구매">${descriptionPrefix} 활동 재료 구매</option><option value="활동재료비 지급">${descriptionPrefix} 활동재료비 지급</option><option value="간식 구매">${descriptionPrefix} 간식 구매</option><option value="배너 제작">${descriptionPrefix} 배너 제작</option><option value="현수막 제작">${descriptionPrefix} 현수막 제작</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">체크한 행에는 위 메뉴의 문구를 적용할 수 있습니다. 품목별로 구매 또는 제작을 고르고, 지출내용·지출처 칸을 직접 클릭해 수정할 수 있습니다.</p></div>
     </article>`;
   }
 
@@ -1059,7 +1060,7 @@
       return lines.map((item, lineIndex) => {
         const itemKey = item.itemIndex == null ? tx.id : `${tx.id}::${item.itemIndex}`;
         const itemAction = itemKey ? report.detailItemActions?.[itemKey] || '' : '';
-        const descriptionInfo = reportDescription({ ...tx, merchant }, result, suffix, item.label, itemAction);
+        const descriptionInfo = reportDescription({ ...tx, merchant }, result, suffix, item.label, itemAction, report.kind);
         const description = Object.prototype.hasOwnProperty.call(report.detailDescriptions || {}, itemKey)
           ? report.detailDescriptions[itemKey]
           : descriptionInfo.description;
@@ -1069,7 +1070,7 @@
         const merchantEditor = `<input class="description-edit" type="text" data-detail-merchant="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} 지출처 수정" value="${escapeHtml(merchant)}">`;
         const sharedCells = lineIndex === 0;
         const rowspan = lines.length > 1 ? ` rowspan="${lines.length}"` : '';
-        return `<tr>${sharedCells ? `<td${rowspan}><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td${rowspan}>${escapeHtml(dateText(tx.date))}</td>` : ''}<td class="num">${moneyText(item.amount)}</td><td>${descriptionEditor}${review}${itemActionSelect}${sharedCells && sourceDetail ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td>${sharedCells ? `<td${rowspan}>${merchantEditor}</td><td${rowspan}><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td${rowspan}>${escapeHtml(detailNote(report, tx))}</td><td${rowspan}>${status}</td>` : ''}</tr>`;
+        return `<tr>${sharedCells ? `<td${rowspan}><input type="checkbox" data-detail-check="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} ${moneyText(tx.amount)}원 지출내용 선택"${checked}></td><td${rowspan}>${escapeHtml(dateText(tx.date))}</td>` : ''}<td class="num">${moneyText(item.amount)}</td><td>${descriptionEditor}${review}${itemActionSelect}${sharedCells && sourceDetail && cleanText(sourceDetail) !== cleanText(description) ? `<small class="detail-note">${escapeHtml(sourceDetail)}</small>` : ''}</td>${sharedCells ? `<td${rowspan}>${merchantEditor}</td><td${rowspan}><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td${rowspan}>${escapeHtml(detailNote(report, tx))}</td><td${rowspan}>${status}</td>` : ''}</tr>`;
       }).join('');
     }).join('');
   }
@@ -1139,10 +1140,14 @@
     return [program, group, value].filter(Boolean).join(' ');
   }
 
-  function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '') {
+  function reportDescription(tx, result, suffix, itemLabel = '', itemAction = '', kind = '') {
     const matched = tx.matchedOperation;
     const matchedProgram = operationName(matched);
-    const program = matchedProgram || '프로그램명 확인 필요';
+    const program = kind === 'family' ? '가족봉사단' : matchedProgram || '프로그램명 확인 필요';
+    const ledgerDescription = cleanText(tx.memo);
+    if (kind === 'family' && !suffix && !itemAction && ledgerDescription) {
+      return { description: ledgerDescription, needsReview: false };
+    }
     const automaticPhrase = expensePhraseForProgram(program, automaticExpensePhrase(tx, itemLabel));
     if (itemLabel) {
       const suffixPhrase = expensePhraseForProgram(program, suffix);
@@ -1170,7 +1175,7 @@
     return result.details.flatMap((tx) => (itemized.get(tx.id) || [{ label: '', amount: tx.amount }]).map((item) => {
       const itemKey = item.itemIndex == null ? tx.id : `${tx.id}::${item.itemIndex}`;
       const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
-      const { description: generatedDescription } = reportDescription({ ...tx, merchant }, result, report.detailSuffixes?.[tx.id], item.label, report.detailItemActions?.[itemKey] || '');
+      const { description: generatedDescription } = reportDescription({ ...tx, merchant }, result, report.detailSuffixes?.[tx.id], item.label, report.detailItemActions?.[itemKey] || '', report.kind);
       const description = Object.prototype.hasOwnProperty.call(report.detailDescriptions || {}, itemKey)
         ? report.detailDescriptions[itemKey]
         : generatedDescription;
