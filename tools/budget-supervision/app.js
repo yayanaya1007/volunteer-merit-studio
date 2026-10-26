@@ -69,14 +69,7 @@
     const inferNote = report.kind === 'professional' ? professionalNoteFromText
       : report.kind === 'family' ? familyNoteFromText : null;
     if (!inferNote) return savedNote || '';
-    const matched = tx.matchedOperation;
-    const directNote = inferNote(tx.repaymentGroup)
-      || inferNote(matched?.group)
-      || inferNote(matched?.activity)
-      || inferNote(tx.memo);
-    const note = savedNote ?? directNote;
-    if (report.kind !== 'family' || !tx.repaymentRecorded || /상환/.test(note)) return note;
-    return [note, '상환'].filter(Boolean).join(' / ');
+    return savedNote ?? (inferNote(tx.group) || inferNote(tx.memo));
   }
 
   function openWorkDb() {
@@ -381,7 +374,6 @@
         group,
         place,
         remarks,
-        repaymentRecorded: kind === 'family' && /상환/.test(remarks),
         kind,
         sourceFile: file.name,
       });
@@ -590,18 +582,6 @@
         if (found.confident) tx.matchedOperation = op;
       }
     }
-    if (operation.kind === 'family') {
-      for (const op of operations.filter((entry) => entry.repaymentRecorded && entry.date <= cutoffDate)) {
-        const related = periodTransactions.filter((tx) => tx.matchedOperation === op);
-        if (related.length) {
-          for (const tx of related) {
-            tx.repaymentGroup = op.group;
-          }
-          const first = related.slice().sort((a, b) => a.date - b.date || a.rowNumber - b.rowNumber)[0];
-          first.repaymentRecorded = true;
-        }
-      }
-    }
     const txs = periodTransactions;
     const opThroughPeriod = [...new Set(txs.map((tx) => tx.amountMatchedOperation).filter(Boolean))];
     const matchedOperations = new Set(opThroughPeriod);
@@ -620,7 +600,7 @@
       const key = monthKey(tx.date);
       return {
         ...tx,
-        method: tx.method || tx.matchedOperation?.method || '',
+        method: tx.method,
         monthKey: key,
       };
     });
@@ -629,8 +609,8 @@
     return { transactions: txs, details, total, opThroughPeriod, unlinkedOperations, operationAmounts, months, monthMismatches, monthlyDeviation, cutoffDate, budget: ledger.budget };
   }
 
-  function determineKind(op, ledger, opFile, ledgerFile) {
-    return op.kind || ledger.kind || kindFromText(`${opFile.name} ${ledgerFile.name}`) || 'other';
+  function determineKind(ledger, ledgerFile) {
+    return ledger.kind || kindFromText(ledgerFile.name) || 'other';
   }
 
   function cutoffValue() {
@@ -651,7 +631,7 @@
       const ledger = ledgerParsed[index];
       const operationFile = opFiles.find((f) => f.name === op.sourceFile);
       const ledgerFile = ledFiles.find((f) => f.name === ledger.sourceFile);
-      pairs.push({ op, ledger, operationFile, ledgerFile, kind: determineKind(op, ledger, operationFile || { name: '' }, ledgerFile || { name: '' }) });
+      pairs.push({ op, ledger, operationFile, ledgerFile, kind: determineKind(ledger, ledgerFile || { name: '' }) });
     }
     return pairs;
   }
@@ -844,7 +824,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 금액 일치액</th><th>집행장부 지출 합계</th><th>금액 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 비고 적용 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">집행장부 거래 1건을 한 행으로 표시합니다. 지출금액과 지출내용은 장부 원문 그대로 사용하며, 수정하려면 집행장부 파일을 고쳐 다시 올려 주세요.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>장부에 봉사단 이름이 있으면 비고에 표시합니다. 비어 있는 행은 체크 후 분야를 선택해 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 비고 적용 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">집행장부 거래 1건을 한 행으로 표시합니다. 지출금액과 지출내용은 장부 원문 그대로 사용하며, 수정하려면 집행장부 파일을 고쳐 다시 올려 주세요.</p></div>
     </article>`;
   }
 
@@ -861,7 +841,7 @@
     if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다. 해당 행의 상세 합계를 확인해 주세요.` });
     if (controlMismatch.length) alerts.push({ type: 'error', text: `집행장부 월계 행과 거래내역 합계가 다른 월이 ${controlMismatch.length}개 있습니다: ${controlMismatch.map((x) => `${x.key} (${moneyText(x.amount)} vs ${moneyText(x.control)})`).join(' · ')}.` });
     const methodMissing = result.details.filter((tx) => !tx.method).length;
-    if (methodMissing) alerts.push({ type: 'warn', text: `결제방법을 운영현황에서 찾지 못한 거래가 ${methodMissing}건 있습니다. HWPX에는 ‘자료 미확인’으로 입력합니다.` });
+    if (methodMissing) alerts.push({ type: 'warn', text: `집행장부에 결제방법이 없는 거래가 ${methodMissing}건 있습니다. HWPX에는 ‘자료 미확인’으로 입력합니다.` });
     if (!alerts.length) alerts.push({ type: 'good', text: '보고 기간의 집행장부 거래와 운영현황 항목을 대조했습니다.' });
     return alerts;
   }
