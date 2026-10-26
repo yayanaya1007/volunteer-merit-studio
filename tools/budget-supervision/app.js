@@ -579,7 +579,7 @@
     });
     const monthMismatches = Object.entries(months).filter(([, value]) => value.difference !== 0);
     const monthlyDeviation = monthMismatches.reduce((sum, [, value]) => sum + Math.abs(value.difference), 0);
-    return { transactions: txs, details, opThroughPeriod, operationAmounts, months, monthMismatches, monthlyDeviation, cutoffDate, budget: ledger.budget };
+    return { transactions: txs, details, total, opThroughPeriod, operationAmounts, months, monthMismatches, monthlyDeviation, cutoffDate, budget: ledger.budget };
   }
 
   function itemizedLedgerItems(result) {
@@ -973,20 +973,22 @@
     if (textNodes.length) {
       textNodes[0].textContent = String(value ?? '');
       textNodes.slice(1).forEach((node) => { node.textContent = ''; });
-      return;
+    } else {
+      const p = xmlElements(cell, 'p')[0];
+      if (!p) return;
+      let run = Array.from(p.children).find((child) => child.localName === 'run');
+      if (!run) {
+        run = doc.createElementNS(NS, 'hp:run');
+        run.setAttribute('charPrIDRef', '18');
+        p.appendChild(run);
+      }
+      const t = doc.createElementNS(NS, 'hp:t');
+      t.textContent = String(value ?? '');
+      run.appendChild(t);
     }
-    const p = xmlElements(cell, 'p')[0];
-    if (!p) return;
-    let run = Array.from(p.children).find((child) => child.localName === 'run');
-    if (!run) {
-      run = doc.createElementNS(NS, 'hp:run');
-      run.setAttribute('charPrIDRef', '18');
-      const lineSegs = Array.from(p.children).find((child) => child.localName === 'linesegarray');
-      p.insertBefore(run, lineSegs || null);
-    }
-    const t = doc.createElementNS(NS, 'hp:t');
-    t.textContent = String(value ?? '');
-    run.appendChild(t);
+    // Cached geometry in the blank template describes only one line.
+    // Hancom must lay out the inserted text again to wrap within the cell.
+    xmlElements(cell, 'linesegarray').forEach((node) => node.remove());
   }
 
   function directRows(table) {
@@ -1139,6 +1141,19 @@
       if (!item || cells.length < 6) continue;
       const values = [dateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
       cells.slice(0, 6).forEach((cell, col) => appendTextToCell(doc, cell, values[col]));
+    }
+    // The template stores its table height as the sum of its original five rows.
+    // Extend that height with the cloned rows so they do not overlap visually.
+    const tableSize = Array.from(detailTable.children).find((child) => child.localName === 'sz');
+    if (tableSize) {
+      const height = directRows(detailTable).reduce((sum, row) => {
+        const cellHeights = directCells(row).map((cell) => {
+          const size = Array.from(cell.children).find((child) => child.localName === 'cellSz');
+          return Number(size?.getAttribute('height')) || 0;
+        });
+        return sum + Math.max(0, ...cellHeights);
+      }, 0);
+      tableSize.setAttribute('height', String(height));
     }
 
     const serialized = new XMLSerializer().serializeToString(doc);
