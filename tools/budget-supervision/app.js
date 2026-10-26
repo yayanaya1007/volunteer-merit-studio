@@ -453,7 +453,8 @@
         sourceFile: file.name,
       });
     }
-    const summaryValues = rows.slice(0, Math.min(8, rows.length)).flat()
+    const summaryValues = rows.slice(0, Math.min(headerRow + 3, rows.length))
+      .filter((row) => !parseDate(row?.[dateCol], year)).flat()
       .filter((value) => typeof value === 'number' || /^\s*[\d,]+\s*(?:원)?\s*$/.test(String(value ?? '')))
       .map(money).filter((n) => n > 1000);
     const explicitBudget = rows.slice(0, 12).flat().map((v) => {
@@ -555,6 +556,7 @@
         activityRefDate: activityRefCol >= 0 ? parseDate(row[activityRefCol], year) : null,
         sourceFile: file.name,
         matchedOperation: null,
+        amountMatchedOperation: null,
       });
     }
     const batches = new Map();
@@ -604,12 +606,12 @@
   }
 
   function matchingTransactions(operation, transactions) {
-    const available = transactions.filter((tx) => !tx.matchedOperation);
+    const available = transactions.filter((tx) => !tx.amountMatchedOperation);
     if (!available.length || operation.amount <= 0) return null;
     const activityReference = available.filter((tx) => tx.activityRefDate?.getTime() === operation.date.getTime());
     if (activityReference.length) {
       const referenced = subsetForReferencedActivity(activityReference, operation.amount, operation);
-      if (referenced) return referenced;
+      if (referenced) return { transactions: referenced, confident: true };
     }
     const possible = available.filter((tx) => !tx.activityRefDate || tx.activityRefDate.getTime() === operation.date.getTime());
     const items = operation.items || [];
@@ -631,12 +633,15 @@
         if (!candidate) { chosen.length = 0; break; }
         chosen.push(candidate);
       }
-      if (chosen.length === items.length) return chosen;
+      if (chosen.length === items.length) return { transactions: chosen, confident: true };
     }
     const byTotal = possible.filter((tx) => tx.amount === operation.amount);
-    if (byTotal.length === 1) return byTotal;
     const byMerchant = byTotal.filter((tx) => items.some((item) => merchantMatchesItem(item, tx)));
-    return byMerchant.length === 1 ? byMerchant : null;
+    if (byMerchant.length === 1) return { transactions: byMerchant, confident: true };
+    if (!byTotal.length) return null;
+    const sameAmountCount = transactions.filter((tx) => tx.amount === operation.amount
+      && (!tx.activityRefDate || tx.activityRefDate.getTime() === operation.date.getTime())).length;
+    return { transactions: [byTotal[0]], confident: sameAmountCount === 1 };
   }
 
   function matchBooks(operation, ledger, cutoff) {
@@ -646,7 +651,10 @@
     const operations = operation.entries.filter((entry) => entry.date.getFullYear() === cutoff.year && !(/외상/.test(entry.remarks) && !entry.declaredAmount));
     for (const op of operations.slice().sort((a, b) => b.items.length - a.items.length || a.rowNumber - b.rowNumber)) {
       const found = matchingTransactions(op, periodTransactions);
-      if (found) for (const tx of found) tx.matchedOperation = op;
+      if (found) for (const tx of found.transactions) {
+        tx.amountMatchedOperation = op;
+        if (found.confident) tx.matchedOperation = op;
+      }
     }
     if (operation.kind === 'family') {
       for (const op of operations.filter((entry) => entry.repaymentAmount > 0 && entry.date <= cutoffDate)) {
@@ -661,17 +669,17 @@
       }
     }
     const txs = periodTransactions;
-    const opThroughPeriod = [...new Set(txs.map((tx) => tx.matchedOperation).filter(Boolean))];
+    const opThroughPeriod = [...new Set(txs.map((tx) => tx.amountMatchedOperation).filter(Boolean))];
     const matchedOperations = new Set(opThroughPeriod);
     const unlinkedOperations = operations.filter((op) => op.date <= cutoffDate && op.declaredAmount > 0 && !matchedOperations.has(op));
     const total = txs.reduce((sum, tx) => sum + tx.amount, 0);
-    const operationAmounts = txs.filter((tx) => tx.matchedOperation).reduce((sum, tx) => sum + tx.amount, 0);
+    const operationAmounts = txs.filter((tx) => tx.amountMatchedOperation).reduce((sum, tx) => sum + tx.amount, 0);
     const months = {};
     for (let m = 1; m <= cutoff.month; m += 1) {
       const key = `${cutoff.year}-${String(m).padStart(2, '0')}`;
       const monthTx = txs.filter((tx) => `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}` === key);
       const amount = monthTx.reduce((sum, tx) => sum + tx.amount, 0);
-      const operationAmount = monthTx.filter((tx) => tx.matchedOperation).reduce((sum, tx) => sum + tx.amount, 0);
+      const operationAmount = monthTx.filter((tx) => tx.amountMatchedOperation).reduce((sum, tx) => sum + tx.amount, 0);
       months[key] = { amount, operationAmount, difference: amount - operationAmount, control: ledger.monthlyControl[key] ?? null };
     }
     const details = txs.map((tx) => {
@@ -1006,12 +1014,12 @@
       <div class="metrics">
         <div class="metric"><span>장부 예산액</span><b>${budget ? moneyText(budget) : '자료 미확인'}</b><small>${escapeHtml(opBudgetText)}</small></div>
         <div class="metric"><span>${cutoff.month}월 말 누적 집행액</span><b>${moneyText(result.total)}</b><small>집행장부 거래일 기준</small></div>
-        <div class="metric"><span>운영현황 연결 집행액</span><b>${moneyText(result.operationAmounts)}</b><small>집행장부 거래일 기준</small></div>
-        <div class="metric"><span>연결 확인이 필요한 지출</span><b>${mismatchedMonths ? `${mismatchedMonths}개월` : '없음'}</b><small>${moneyText(result.monthlyDeviation)} · 잔액 ${remaining == null ? '—' : moneyText(remaining)}</small></div>
+        <div class="metric"><span>운영현황 금액 일치액</span><b>${moneyText(result.operationAmounts)}</b><small>집행장부 거래일 기준</small></div>
+        <div class="metric"><span>금액 확인이 필요한 지출</span><b>${mismatchedMonths ? `${mismatchedMonths}개월` : '없음'}</b><small>${moneyText(result.monthlyDeviation)} · 잔액 ${remaining == null ? '—' : moneyText(remaining)}</small></div>
       </div>
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
-      ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 연결액</th><th>집행장부 지출 합계</th><th>연결 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 연결' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 금액 일치액</th><th>집행장부 지출 합계</th><th>금액 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
       <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="활동 재료 구매">프로그램명 활동 재료 구매</option><option value="활동재료비 지급">프로그램명 활동재료비 지급</option><option value="간식 구매">프로그램명 간식 구매</option><option value="배너 제작">프로그램명 배너 제작</option><option value="현수막 제작">프로그램명 현수막 제작</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">체크한 행에는 위 메뉴의 문구를 적용할 수 있습니다. 품목별로 구매 또는 제작을 고르고, 지출내용·지출처 칸을 직접 클릭해 수정할 수 있습니다.</p></div>
     </article>`;
   }
@@ -1021,8 +1029,10 @@
     const alerts = [];
     if (budgetMismatch) alerts.push({ type: 'warn', text: `예산액이 서로 다릅니다. ${op.budget.toLocaleString()}원(운영현황) · ${result.budget.toLocaleString()}원(집행장부). HWPX 예산액은 장부 기준으로 넣습니다.` });
     else if (result.budget) alerts.push({ type: 'good', text: `예산액 확인: 운영현황 ${op.budget ? moneyText(op.budget) : '미기재'} · 집행장부 ${moneyText(result.budget)}.` });
-    if (result.monthMismatches.length) alerts.push({ type: 'warn', text: `운영현황 항목과 연결을 확인할 장부 지출이 ${result.monthMismatches.length}개월에 있습니다: ${result.monthMismatches.map(([key, month]) => `${key} ${moneyText(month.difference)}`).join(' · ')}.` });
-    else if (Object.keys(result.months).length) alerts.push({ type: 'good', text: '보고 기간의 장부 지출이 운영현황 항목과 모두 연결되었습니다. 활동일은 구매일로 사용하지 않았습니다.' });
+    if (result.monthMismatches.length) alerts.push({ type: 'warn', text: `운영현황과 같은 금액을 확인할 장부 지출이 ${result.monthMismatches.length}개월에 있습니다: ${result.monthMismatches.map(([key, month]) => `${key} ${moneyText(month.difference)}`).join(' · ')}.` });
+    else if (Object.keys(result.months).length) alerts.push({ type: 'good', text: '보고 기간의 장부 지출액이 운영현황 금액과 일치합니다. 활동일은 구매일로 사용하지 않았습니다.' });
+    const amountOnly = result.details.filter((tx) => tx.amountMatchedOperation && !tx.matchedOperation);
+    if (amountOnly.length) alerts.push({ type: 'warn', text: `같은 금액의 거래가 여러 건이라 프로그램·봉사단 연결을 확인할 행이 ${amountOnly.length}건 있습니다. 금액은 일치로 계산했습니다.` });
     if (result.unlinkedOperations.length) alerts.push({ type: 'warn', text: `운영현황 사용액 중 장부 거래를 찾지 못한 행이 ${result.unlinkedOperations.length}건 있습니다: ${result.unlinkedOperations.map((op) => `${op.rowNumber}행 ${moneyText(op.declaredAmount)}`).join(' · ')}.` });
     if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다. 해당 행의 상세 합계를 확인해 주세요.` });
     if (controlMismatch.length) alerts.push({ type: 'error', text: `집행장부 월계 행과 거래내역 합계가 다른 월이 ${controlMismatch.length}개 있습니다: ${controlMismatch.map((x) => `${x.key} (${moneyText(x.amount)} vs ${moneyText(x.control)})`).join(' · ')}.` });
@@ -1039,8 +1049,10 @@
     const itemized = itemizedLedgerItems(result);
     return result.details.map((tx) => {
       const status = tx.matchedOperation
-        ? '<span class="badge match">운영현황 연결</span>'
-        : '<span class="badge unmatched">연결 확인 필요</span>';
+        ? '<span class="badge match">금액·항목 일치</span>'
+        : tx.amountMatchedOperation
+          ? '<span class="badge unmatched">금액 일치 · 항목 확인</span>'
+          : '<span class="badge unmatched">금액 확인 필요</span>';
       const suffix = report.detailSuffixes?.[tx.id];
       const items = itemized.get(tx.id);
       const lines = items?.length ? items : [{ label: '', amount: tx.amount }];
