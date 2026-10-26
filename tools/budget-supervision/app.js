@@ -39,7 +39,9 @@
   function normalizeSavedDetailNotes(notes) {
     return Object.fromEntries(Object.entries(notes || {}).map(([id, note]) => [
       id,
-      String(note ?? '').replace(/^(?:전문봉사단|가족봉사단)\s+/, ''),
+      String(note ?? '')
+        .replace(/^(?:전문봉사단|가족봉사단)\s+/, '')
+        .replace(/상환\s*[:：]?\s*[\d,]+\s*원?/g, '상환'),
     ]));
   }
 
@@ -61,11 +63,6 @@
     return matches.length === 1 ? matches[0] : '';
   }
 
-  function repaymentAmountFromText(text) {
-    const match = cleanText(text).match(/상환\s*[:：]?\s*([\d,]+)\s*원?/);
-    return match ? money(match[1]) : 0;
-  }
-
   function detailNote(report, tx) {
     const savedNote = Object.prototype.hasOwnProperty.call(report.detailNotes || {}, tx.id)
       ? report.detailNotes[tx.id] : null;
@@ -78,8 +75,8 @@
       || inferNote(matched?.activity)
       || inferNote(tx.memo);
     const note = savedNote ?? directNote;
-    if (report.kind !== 'family' || !tx.repaymentAmount || /상환\s*[:：]?\s*[\d,]+/.test(note)) return note;
-    return [note, `상환 ${moneyText(tx.repaymentAmount)}`].filter(Boolean).join(' / ');
+    if (report.kind !== 'family' || !tx.repaymentRecorded || /상환/.test(note)) return note;
+    return [note, '상환'].filter(Boolean).join(' / ');
   }
 
   function normalizeSavedDetailSuffixes(suffixes) {
@@ -448,7 +445,7 @@
         group,
         place,
         remarks,
-        repaymentAmount: kind === 'family' ? repaymentAmountFromText(remarks) : 0,
+        repaymentRecorded: kind === 'family' && /상환/.test(remarks),
         kind,
         sourceFile: file.name,
       });
@@ -657,14 +654,14 @@
       }
     }
     if (operation.kind === 'family') {
-      for (const op of operations.filter((entry) => entry.repaymentAmount > 0 && entry.date <= cutoffDate)) {
+      for (const op of operations.filter((entry) => entry.repaymentRecorded && entry.date <= cutoffDate)) {
         const related = periodTransactions.filter((tx) => tx.matchedOperation === op);
         if (related.length) {
           for (const tx of related) {
             tx.repaymentGroup = op.group;
           }
           const first = related.slice().sort((a, b) => a.date - b.date || a.rowNumber - b.rowNumber)[0];
-          first.repaymentAmount = op.repaymentAmount;
+          first.repaymentRecorded = true;
         }
       }
     }
