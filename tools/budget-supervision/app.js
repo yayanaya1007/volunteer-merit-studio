@@ -24,6 +24,7 @@
 
   const normalize = (value) => String(value ?? '').replace(/[\s\r\n]+/g, '').toLowerCase();
   const cleanText = (value) => String(value ?? '').replace(/\r/g, '').replace(/[\t ]+/g, ' ').trim();
+  const documentField = (value) => /^(?:자료\s*미확인|미확인|확인\s*필요)$/.test(cleanText(value)) ? '' : String(value ?? '');
   const money = (value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
     const s = String(value ?? '').replace(/,/g, '').replace(/[^\d.-]/g, '');
@@ -725,8 +726,8 @@
     if (result.unlinkedOperations.length) alerts.push({ type: 'warn', text: `운영현황 사용액 중 장부 거래를 찾지 못한 행이 ${result.unlinkedOperations.length}건 있습니다: ${result.unlinkedOperations.map((op) => `${op.rowNumber}행 ${moneyText(op.declaredAmount)}`).join(' · ')}.` });
     if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다. 해당 행의 상세 합계를 확인해 주세요.` });
     if (controlMismatch.length) alerts.push({ type: 'error', text: `집행장부 월계 행과 거래내역 합계가 다른 월이 ${controlMismatch.length}개 있습니다: ${controlMismatch.map((x) => `${x.key} (${moneyText(x.amount)} vs ${moneyText(x.control)})`).join(' · ')}.` });
-    const methodMissing = result.details.filter((tx) => !tx.method).length;
-    if (methodMissing) alerts.push({ type: 'warn', text: `집행장부에 결제방법이 없는 거래가 ${methodMissing}건 있습니다. HWPX에는 ‘자료 미확인’으로 입력합니다.` });
+    const methodMissing = result.details.filter((tx) => !documentField(tx.method)).length;
+    if (methodMissing) alerts.push({ type: 'warn', text: `집행장부에 결제방법이 없는 거래가 ${methodMissing}건 있습니다. HWPX의 해당 칸은 비워 둡니다.` });
     if (!alerts.length) alerts.push({ type: 'good', text: '보고 기간의 집행장부 거래와 운영현황 항목을 대조했습니다.' });
     return alerts;
   }
@@ -740,10 +741,11 @@
         : tx.amountMatchedOperation
           ? '<span class="badge unmatched">금액 일치 · 항목 확인</span>'
           : '<span class="badge unmatched">금액 확인 필요</span>';
-      const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
+      const merchant = documentField(report.detailMerchants?.[tx.id] ?? tx.merchant);
       const description = `<span class="ledger-memo">${escapeHtml(tx.memo)}</span>${cleanText(tx.memo) ? '' : ' <span class="badge unmatched">장부 적요 확인</span>'}`;
       const merchantEditor = `<input class="description-edit" type="text" data-detail-merchant="${escapeHtml(tx.id)}" data-report-index="${reportIndex}" aria-label="${escapeHtml(dateText(tx.date))} 지출처 수정" value="${escapeHtml(merchant)}">`;
-      return `<tr><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${description}</td><td>${merchantEditor}</td><td><span class="badge method">${escapeHtml(tx.method || '자료 미확인')}</span></td><td></td><td>${status}</td></tr>`;
+      const method = documentField(tx.method);
+      return `<tr><td>${escapeHtml(dateText(tx.date))}</td><td class="num">${moneyText(tx.amount)}</td><td>${description}</td><td>${merchantEditor}</td><td>${method ? `<span class="badge method">${escapeHtml(method)}</span>` : ''}</td><td></td><td>${status}</td></tr>`;
     }).join('');
   }
 
@@ -800,8 +802,8 @@
   function reportDetails(report) {
     const { result } = report;
     return result.details.map((tx) => {
-      const merchant = report.detailMerchants?.[tx.id] ?? tx.merchant ?? '자료 미확인';
-      return { date: tx.date, amount: tx.amount, description: tx.memo, merchant, method: tx.method || '자료 미확인', note: '' };
+      const merchant = documentField(report.detailMerchants?.[tx.id] ?? tx.merchant);
+      return { date: tx.date, amount: tx.amount, description: tx.memo, merchant, method: documentField(tx.method), note: '' };
     });
   }
 
