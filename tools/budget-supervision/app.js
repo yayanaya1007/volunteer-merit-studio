@@ -32,8 +32,8 @@
   };
   const moneyText = (n) => `${Math.round(n || 0).toLocaleString('ko-KR')}원`;
   const moneyCell = (n) => Math.round(n || 0).toLocaleString('ko-KR');
-  const dateText = (date) => date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : '';
   const expenseDateText = (date) => date ? `${date.getMonth() + 1}.${date.getDate()}.` : '';
+  const dateText = expenseDateText;
   const monthKey = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : '';
 
   function normalizeSavedDetailNotes(notes) {
