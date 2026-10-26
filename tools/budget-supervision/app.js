@@ -890,11 +890,19 @@
       report.detailDescriptions ||= {};
       report.checkedDetailIds = selectedIds;
       selectedIds.forEach((id) => {
-        report.detailSuffixes[id] = select.value;
+        if (select.value === '__ledger__') {
+          delete report.detailSuffixes[id];
+          delete report.detailItemActions?.[id];
+          Object.keys(report.detailItemActions || {}).filter((key) => key.startsWith(`${id}::`)).forEach((key) => delete report.detailItemActions[key]);
+        } else {
+          report.detailSuffixes[id] = select.value;
+        }
         delete report.detailDescriptions[id];
         Object.keys(report.detailDescriptions).filter((key) => key.startsWith(`${id}::`)).forEach((key) => delete report.detailDescriptions[key]);
       });
-      setStatus(`체크한 지출내역 ${selectedIds.length}건에 ‘${select.value}’ 문구를 적용했습니다.`, 'busy');
+      setStatus(select.value === '__ledger__'
+        ? `체크한 지출내역 ${selectedIds.length}건을 집행장부 적요로 되돌렸습니다.`
+        : `체크한 지출내역 ${selectedIds.length}건에 ‘${select.value}’ 문구를 적용했습니다.`, 'busy');
       renderReports();
       programResults.querySelector(`[data-description-suffix="${select.dataset.descriptionSuffix}"]`)?.focus();
     }));
@@ -1018,7 +1026,7 @@
       <div class="audit-summary"><h4>자료 대조 알림</h4></div>
       <ul class="alerts">${alerts.map((a) => `<li class="alert ${a.type}"><b>${a.type === 'good' ? '확인' : a.type === 'error' ? '불일치' : '검토'}</b><span>${escapeHtml(a.text)}</span></li>`).join('')}</ul>
       ${monthRows.length ? `<table class="months"><thead><tr><th>장부 지출월</th><th>운영현황 금액 일치액</th><th>집행장부 지출 합계</th><th>금액 확인 필요</th><th>집행장부 월계</th></tr></thead><tbody>${monthRows.map(([key, m]) => `<tr><td>${escapeHtml(key.replace('-', '년 ') + '월')}</td><td>${moneyText(m.operationAmount)}</td><td>${moneyText(m.amount)}</td><td>${moneyText(m.difference)}${m.difference === 0 ? ' · 모두 일치' : ' · 확인'}</td><td>${m.control == null ? '월계 없음' : `${moneyText(m.control)}${m.control === m.amount ? ' · 일치' : ' · 차이 확인'}`}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="활동 재료 구매">${descriptionPrefix} 활동 재료 구매</option><option value="활동재료비 지급">${descriptionPrefix} 활동재료비 지급</option><option value="간식 구매">${descriptionPrefix} 간식 구매</option><option value="배너 제작">${descriptionPrefix} 배너 제작</option><option value="현수막 제작">${descriptionPrefix} 현수막 제작</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">체크한 행에는 위 메뉴의 문구를 적용할 수 있습니다. 품목별로 구매 또는 제작을 고르고, 지출내용·지출처 칸을 직접 클릭해 수정할 수 있습니다.</p></div>
+      <div class="detail-section"><div class="detail-heading"><h4>집행엑셀 기준 지출내역</h4><label class="description-choice">체크한 지출내용에 적용 <select data-description-suffix="${index}" aria-label="${escapeHtml(kindLabel(kind))} 체크한 지출내용에 문구 적용"><option value="" selected>먼저 행을 체크하세요</option><option value="__ledger__">집행장부 적요 그대로</option><option value="활동 재료 구매">${descriptionPrefix} 활동 재료 구매</option><option value="활동재료비 지급">${descriptionPrefix} 활동재료비 지급</option><option value="간식 구매">${descriptionPrefix} 간식 구매</option><option value="배너 제작">${descriptionPrefix} 배너 제작</option><option value="현수막 제작">${descriptionPrefix} 현수막 제작</option></select></label></div><div class="note-controls"><label>비고 봉사단<select data-note-kind="${index}" aria-label="비고 봉사단 선택"><option value="">봉사단 선택</option><option value="전문봉사단"${report.noteKind === '전문봉사단' ? ' selected' : ''}>전문봉사단</option><option value="가족봉사단"${report.noteKind === '가족봉사단' ? ' selected' : ''}>가족봉사단</option></select></label><label>세부 분야<select data-note-subgroup="${index}" aria-label="비고 세부 분야 선택"${report.noteKind ? '' : ' disabled'}><option value="">세부 분야 선택</option>${subgroupOptions}</select></label><button class="button apply-note" type="button" data-apply-note="${index}"${noteReady ? '' : ' disabled'}>선택 행에 비고 적용</button><small>봉사단 이름으로 비고를 자동 입력합니다. 필요한 행은 체크 후 다른 분야를 적용할 수 있습니다.</small></div><div class="table-wrap"><table class="audit-table"><thead><tr><th><label class="select-all"><input type="checkbox" data-select-all="${index}" aria-label="${escapeHtml(kindLabel(kind))} 지출내역 전체선택">전체선택</label></th><th>집행 날짜</th><th>집행액</th><th>지출내용</th><th>지출처</th><th>결제방법</th><th>비고</th><th>운영현황 대조</th></tr></thead><tbody>${renderAuditRows(report, index)}</tbody></table></div><p class="detail-note">체크한 행에는 위 메뉴의 문구를 적용할 수 있습니다. 품목별로 구매 또는 제작을 고르고, 지출내용·지출처 칸을 직접 클릭해 수정할 수 있습니다.</p></div>
     </article>`;
   }
 
@@ -1145,7 +1153,7 @@
     const matchedProgram = operationName(matched);
     const program = kind === 'family' ? '가족봉사단' : matchedProgram || '프로그램명 확인 필요';
     const ledgerDescription = cleanText(tx.memo);
-    if (kind === 'family' && !suffix && !itemAction && ledgerDescription) {
+    if (!suffix && !itemAction && ledgerDescription) {
       return { description: ledgerDescription, needsReview: false };
     }
     const automaticPhrase = expensePhraseForProgram(program, automaticExpensePhrase(tx, itemLabel));
