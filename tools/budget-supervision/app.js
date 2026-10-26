@@ -1187,6 +1187,7 @@
     const values = [expenseDateText(item.date), moneyCell(item.amount), item.description, item.merchant, item.method, item.note];
     const charsPerLine = [7, 8, 17, 13, 7, 5];
     const lines = values.map((value, index) => {
+      if (index === 5) return 1; // 비고 셀은 한 줄로 넣기 서식을 사용한다.
       const width = Array.from(String(value ?? '')).reduce((sum, char) => sum + (/[\x00-\x7f]/.test(char) ? 0.55 : 1), 0);
       return Math.max(1, Math.ceil(width / charsPerLine[index]));
     });
@@ -1326,6 +1327,10 @@
           const size = Array.from(cell.children).find((child) => child.localName === 'cellSz');
           if (size) size.setAttribute('height', String(item.rowHeight));
           appendTextToCell(doc, cell, values[col]);
+          if (col === 5) {
+            const subList = Array.from(cell.children).find((child) => child.localName === 'subList');
+            if (subList) subList.setAttribute('lineWrap', 'SQUEEZE');
+          }
           if (col === 1) xmlElements(cell, 'run').forEach((run) => run.setAttribute('charPrIDRef', '24'));
           const cellParagraph = xmlElements(cell, 'p')[0];
           if (cellParagraph) cellParagraph.setAttribute('paraPrIDRef', '4');
