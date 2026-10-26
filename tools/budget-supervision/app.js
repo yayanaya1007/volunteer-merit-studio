@@ -561,7 +561,7 @@
       const key = monthKey(tx.date);
       return {
         ...tx,
-        method: tx.method,
+        method: documentField(tx.method) || documentField(tx.matchedOperation?.method),
         monthKey: key,
       };
     });
@@ -727,7 +727,7 @@
     if (detailMismatch.length) alerts.push({ type: 'warn', text: `운영현황의 지출 상세 합과 운영비 칸이 다른 행이 ${detailMismatch.length}건 있습니다. 해당 행의 상세 합계를 확인해 주세요.` });
     if (controlMismatch.length) alerts.push({ type: 'error', text: `집행장부 월계 행과 거래내역 합계가 다른 월이 ${controlMismatch.length}개 있습니다: ${controlMismatch.map((x) => `${x.key} (${moneyText(x.amount)} vs ${moneyText(x.control)})`).join(' · ')}.` });
     const methodMissing = result.details.filter((tx) => !documentField(tx.method)).length;
-    if (methodMissing) alerts.push({ type: 'warn', text: `집행장부에 결제방법이 없는 거래가 ${methodMissing}건 있습니다. HWPX의 해당 칸은 비워 둡니다.` });
+    if (methodMissing) alerts.push({ type: 'warn', text: `집행장부와 정확히 연결된 운영현황에서 결제방법을 확인할 수 없는 거래가 ${methodMissing}건 있습니다. HWPX의 해당 칸은 비워 둡니다.` });
     if (!alerts.length) alerts.push({ type: 'good', text: '보고 기간의 집행장부 거래와 운영현황 항목을 대조했습니다.' });
     return alerts;
   }

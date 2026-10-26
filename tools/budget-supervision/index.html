@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css?v=20261026-ledger-memo">
   <script defer src="../../vendor/jszip.min.js"></script>
   <script defer src="../../vendor/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=20261026-blank-unknown-fields"></script>
+  <script defer src="app.js?v=20261026-operation-payment-method"></script>
 </head>
 <body>
   <header class="topbar">
@@ -21,7 +21,7 @@
     <section class="hero">
       <p class="eyebrow">운영현황 + 집행장부 → 거래 항목 대조 → 한글 서식</p>
       <h1>사업비 지출을 대조하고<br>지도점검표를 만드세요</h1>
-      <p class="intro">운영현황은 장부와 금액을 대조하는 데만 사용합니다. 한글 파일의 예산액·집행액·지출일·적요·지출처·결제방법은 집행장부 기준이며, 비고는 비워 둡니다.</p>
+      <p class="intro">운영현황은 금액 대조와 결제방법 확인에 사용합니다. 한글 파일의 예산액·집행액·지출일·적요·지출처는 집행장부 기준이며, 결제방법은 장부 또는 정확히 연결된 운영현황에서 읽습니다. 비고는 비워 둡니다.</p>
       <div class="workflow"><span><b>1</b> 운영현황 업로드</span><span class="arrow">→</span><span><b>2</b> 집행장부 업로드</span><span class="arrow">→</span><span><b>3</b> 거래 연결 확인</span><span class="arrow">→</span><span><b>4</b> HWPX 다운로드</span></div>
     </section>
 
@@ -34,7 +34,7 @@
       <div class="section-head"><div class="number">01</div><div><h2 id="uploadTitle">파일을 선택하세요</h2><p>가족봉사단·전문봉사단 운영현황과 각 집행장부 파일을 함께 올리면 사업 종류를 자동으로 구분합니다. 엑셀을 수정했다면 같은 파일이어도 다시 선택하고 아래 수정 시각을 확인해 주세요.</p></div></div>
       <div class="upload-grid">
         <label class="dropzone" for="operationFiles">
-          <span class="drop-icon">↥</span><strong>운영현황 엑셀</strong><span>금액 대조에만 사용하며 한글 파일에는 옮기지 않습니다.</span>
+          <span class="drop-icon">↥</span><strong>운영현황 엑셀</strong><span>금액 대조와 결제방법 확인에 사용합니다.</span>
           <small id="operationNames">.xls 또는 .xlsx 여러 개 선택</small>
           <input id="operationFiles" type="file" accept=".xls,.xlsx,.xlsm" multiple>
         </label>
