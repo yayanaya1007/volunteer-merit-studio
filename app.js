@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
+const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorPosition','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
 const MAX_GROUPS = 5;
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
@@ -281,7 +281,7 @@ const personalFieldLabels={
   birth:['생년월일','생일','출생일'],gender:['성별'],serviceNo:['군번','군번군인의경우'],nationality:['국적'],
   org:['소속단체','소속기관','소속'],job:['직업'],rank:['직급'],position:['직위'],meritField:['공적분야','공적분야명'],
   address:['주소','집주소','거주지'],phone:['휴대전화','휴대폰번호','휴대폰','연락처','전화번호'],award:['표창','추천훈격','표창훈격','훈격'],order:['추천순위','순위'],
-  investigator:['조사자성명','조사자이름','조사자'],investigatorOrg:['조사자소속'],investigatorRank:['조사자직위','조사자직급'],recommender:['추천관'],docDate:['문서작성일','작성일'],
+  investigator:['조사자성명','조사자이름','조사자'],investigatorOrg:['조사자소속'],investigatorPosition:['조사자직위'],investigatorRank:['조사자직급'],recommender:['추천관'],docDate:['문서작성일','작성일'],
   educationDate:['주요학력날짜','학력날짜'],education:['주요학력내용','주요학력','학력'],careerDate:['주요경력날짜','경력날짜'],career:['주요경력내용','주요경력','경력'],
   historyDate:['과거표창기록날짜','표창기록날짜'],history:['과거표창기록내용','과거표창기록','표창기록내용','표창기록']
 };
@@ -318,7 +318,7 @@ function nameFromWorkbookFilename(filename){
 function applyPersonalFields(info,{overwrite=false}={}){
   let filled=0;
   if(overwrite){
-    for(const id of ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history'])if($(id))$(id).value='';
+    for(const id of ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorPosition','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history'])if($(id))$(id).value='';
     lastAutoName='';
   }
   for(const [id,raw] of Object.entries(info||{})){
@@ -358,7 +358,7 @@ function downloadExcelForm(){
   const labels=[
     ['행사연도','year'],['행사명','event'],['성명','name'],['한자이름','hanja'],['생년월일','birth'],['성별','gender'],['군번 (군인의 경우)','serviceNo'],['국적','nationality'],
     ['소속','org'],['직업','job'],['직급','rank'],['직위','position'],['공적분야','meritField'],['주소','address'],['연락처','phone'],['표창·훈격','award'],['추천순위','order'],
-    ['조사자 성명','investigator'],['조사자 소속','investigatorOrg'],['조사자 직위','investigatorRank'],['추천관','recommender'],['문서 작성일','docDate'],
+    ['조사자 성명','investigator'],['조사자 소속','investigatorOrg'],['조사자 직위','investigatorPosition'],['조사자 직급','investigatorRank'],['추천관','recommender'],['문서 작성일','docDate'],
     ['주요 학력 날짜','educationDate'],['주요 학력 내용','education'],['주요 경력 날짜','careerDate'],['주요 경력 내용','career'],['과거 표창기록 날짜','historyDate'],['과거 표창기록 내용','history']
   ];
   const fieldHelp=[
@@ -373,15 +373,16 @@ function downloadExcelForm(){
     ['소속','예: ○○읍여성의용소방대','지금 봉사하는 단체나 기관은 어디인가요? 단체 이름을 적습니다.'],
     ['직업','예: 회사원','추천 대상자의 직업입니다. 모르면 비워 둡니다.'],
     ['직급','예: 회장, 부장','소속된 단체에 해당 직급이 있으면 적어 주세요. 정해진 직급이 없으면 비워 둡니다.'],
-    ['직위','예: 대원','소속된 단체에 직위를 적어 주세요. 단체에서 맡은 자리나 역할을 적으면 됩니다.'],
-    ['공적분야','예: 자원봉사유공','공적 분야는 자원봉사유공인가요? 표창 추천 분야를 적어 주세요. 서식에 정해진 명칭이 있으면 그 이름을 사용합니다.'],
+    ['직위','예: 대원','소속된 단체에서 맡은 직위를 적어 주세요. 예: 대원, 팀원. 단체에서 부르는 역할 이름을 적으면 됩니다.'],
+    ['공적분야','예: 자원봉사유공','공적 분야는 자원봉사유공인가요? 표창을 어떤 분야로 추천하는지 적어 주세요. 안내받은 분야 이름이 있으면 그대로 적습니다.'],
     ['주소','예: ○○시 ○○동','추천 대상자의 주소입니다.'],
     ['연락처','예: 010-0000-0000','추천 대상자에게 연락할 전화번호입니다.'],
     ['표창·훈격','예: 시장 표창','이번에 추천하는 표창의 종류나 등급입니다. 과거 표창은 아래 과거 표창기록에 적습니다.'],
     ['추천순위','예: 1','여러 명을 추천할 때 이 사람의 순서를 적습니다.'],
-    ['조사자 성명','예: 김담당','현지조사를 하고 조사 내용을 적는 사람입니다. 추천 대상자 이름이 아닙니다.'],
-    ['조사자 소속','예: ○○읍사무소','현지조사 담당자가 근무하는 기관이나 단체입니다.'],
-    ['조사자 직위','예: 팀장','현지조사 담당자의 직위나 역할입니다.'],
+    ['조사자 성명','예: 김담당','추천 대상자를 직접 조사한 사람의 이름입니다. 공적조서를 확인하고 작성하는 담당자 이름을 적습니다.'],
+    ['조사자 소속','예: ○○읍여성의용소방대','조사자가 소속된 봉사단체 이름을 적어 주세요. 예: ○○읍여성의용소방대.'],
+    ['조사자 직위','예: 대원','조사자가 소속 봉사단체에서 맡은 직위를 적어 주세요. 예: 대원, 팀원.'],
+    ['조사자 직급','예: 총무부장','조사자가 소속 봉사단체에서 사용하는 직급을 적어 주세요. 직급이 따로 없으면 빈칸으로 두세요.'],
     ['추천관','예: 홍길동','이 사람을 표창 대상자로 추천하는 사람입니다. 조사자와 다른 사람일 수 있습니다.'],
     ['문서 작성일','2026-11-06','공적조서를 작성하는 날짜입니다. 연도-월-일로 적습니다.'],
     ['주요 학력 날짜','예: 1990-02-01','주요 학력과 관련된 날짜입니다. 모르면 비워 둡니다.'],
@@ -791,7 +792,7 @@ function documentModel() {
   const active=groups.map((group,index)=>({...group,detail:limitMeritDetail(group.detail),index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
-    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
+    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorPosition:val('investigatorPosition'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
 function previewLine(label,value){
@@ -977,8 +978,8 @@ async function createTemplateHwpx(model) {
   replaceParagraph('평가받고 있음.','');
   replaceParagraph('실적 근거 작성, 증빙 확인 필요.',model.matching);
   replaceParagraph('2026년  10월   21일',dateKor);
-  replaceParagraph('소   속  : 예시봉사회',`소   속  : ${model.investigatorOrg||model.org}`);
-  replaceParagraph('직   위  :    총무         성  명 : 김조사',`직   위  :    ${model.investigatorRank}         성  명 : ${model.investigator}`);
+  replaceParagraph('소   속  : 예시봉사회',`소   속  : ${model.investigatorOrg}`);
+  replaceParagraph('직   위  :    총무         성  명 : 김조사',`직   위  :    ${[model.investigatorPosition,model.investigatorRank].filter(Boolean).join(' / ')}         성  명 : ${model.investigator}`);
   // 좌표는 제공된 HWPX의 표/행/칸 순서다. 같은 이름·소속이 반복되어도
   // 다른 서류의 칸까지 바뀌지 않도록 각 필드를 정확한 위치에 기록한다.
   const set=(table,row,cell,value)=>setTemplateCellText(doc,table,row,cell,value);
@@ -998,8 +999,8 @@ async function createTemplateHwpx(model) {
   set(0,8,0,model.gist||model.intro);
   set(0,9,1,model.award);
   set(0,9,3,model.order);
-  set(0,11,1,model.investigatorOrg||model.org);
-  set(0,11,3,model.investigatorRank);
+  set(0,11,1,model.investigatorOrg);
+  set(0,11,3,[model.investigatorPosition,model.investigatorRank].filter(Boolean).join(' / '));
   set(0,12,1,'');
   set(0,12,3,model.investigator);
   replaceTemplateCellText(doc,0,14,0,'추천기관장',model.recommender);
@@ -1080,7 +1081,7 @@ function createHwpxXml(model) {
   ];
   const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 학력',[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력','주요 경력',[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력','과거 표창기록',[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,...String(group.detail||'').split('\n')])];
   const p3=[{text:'공 적 개 요 서',heading:true},`소속: ${model.org}    직급·직책: ${model.rank}`,`성명: ${model.name}    공적기간: ${model.period}`,'공적 개요',...model.groups.flatMap(group=>[`○ ${group.title}`,group.short||''])];
-  const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||fieldInvestigationDraft(selected()).character,'지역여론 (공·사생활 등)',model.reputation||fieldInvestigationDraft(selected()).reputation,'공적사항 (공적내용과 일치 여부)',FIXED_MATCHING,'',model.docDate,`현지조사자  소속: ${model.org}  직위: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
+  const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||fieldInvestigationDraft(selected()).character,'지역여론 (공·사생활 등)',model.reputation||fieldInvestigationDraft(selected()).reputation,'공적사항 (공적내용과 일치 여부)',FIXED_MATCHING,'',model.docDate,`현지조사자  소속: ${model.investigatorOrg}  직위: ${model.investigatorPosition}  직급: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
   const sections=[pageSection(p1,0),pageSection(p2,100,true),pageSection(p3,200,true),pageSection(p4,300,true)].join('');
   const sectionXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hs:sec xmlns:hs="${HWP_NS.hs}" xmlns:hp="${HWP_NS.hp}" xmlns:hc="${HWP_NS.hc}" xmlns:hh="${HWP_NS.hh}" version="1.2">${sections}</hs:sec>`;
   const stampPath=stamp?.type==='image/jpeg'?'stamp.jpg':'stamp.png';
