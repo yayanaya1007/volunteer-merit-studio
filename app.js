@@ -838,7 +838,11 @@ async function generateAIDraft({announceResult=true}={}) {
     if (!response.ok) throw new Error(resultBody.error||'AI 초안을 만들지 못했습니다.');
     const result=resultBody;
     if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string'||typeof result.character!=='string'||typeof result.reputation!=='string'||typeof result.matching!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
-    groups=groups.map((group,index)=>({...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
+    const narrativeRecords=selected();
+    groups=groups.map((group,index)=>{
+      const rows=narrativeRecords.filter(record=>record.cat===index);
+      return {...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(detailedMeritItems(rows).join('\n\n')),short:clean(result.groups[index]?.short)};
+    });
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
     const investigation=fieldInvestigationDraft(selected());
     $('character').value=investigation.character;
