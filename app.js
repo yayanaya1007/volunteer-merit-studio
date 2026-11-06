@@ -1,11 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
-const MAX_GROUPS = 3;
-const MERIT_CATEGORIES = [
-  {key:'environment',title:'환경·생태계보호'},
-  {key:'life',title:'생활편의'},
-  {key:'culture',title:'문화·체육·예술·관광'}
-];
+const MAX_GROUPS = 5;
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
@@ -18,13 +13,13 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;'
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
 const MAX_MERIT_ITEMS = 3;
 const MAX_MERIT_ITEM_LINES = 4; // 활동 제목 1줄 + 설명 3줄
-const MAX_MERIT_LINE_CHARS = 55;
+const MAX_MERIT_LINE_CHARS = 120;
 function limitMeritDetail(value) {
   const items=[];
   for(const rawLine of String(value??'').replace(/\r/g,'').split('\n')){
-    const line=rawLine.trim();
-    if(!line){continue;}
-    if(/^[•●▪◦*-]\s*/.test(line))items.push([line]);
+    const line=rawLine.trimEnd();
+    if(!line.trim()){continue;}
+    if(/^[•●▪◦*-]\s*/.test(line.trimStart()))items.push([line]);
     else if(items.length)items[items.length-1].push(line);
     else items.push([line]);
   }
@@ -39,14 +34,10 @@ function detailedMeritItems(rows) {
     activities.get(key).rows.push(row);
   }
   return [...activities.values()].sort((a,b)=>b.rows.length-a.rows.length||a.first-b.first).slice(0,MAX_MERIT_ITEMS).map(activity=>{
-    const dates=[...new Set(activity.rows.map(row=>row.date).filter(Boolean))];
-    const hours=activity.rows.reduce((sum,row)=>sum+Number(row.hours||0),0);
-    const dateText=dates.length?dates.slice(0,3).map(date=>String(date).replace(/-/g,'.')).join(', ')+(dates.length>3?' 등':''):'원자료에 활동일 없음';
-    const hourText=hours?readableHours(hours):'시간 미기재';
-    return [`• ${activity.title}`,
-      `활동내용: ${activity.title}`,
-      `참여실적: ${activity.rows.length}회 · 인정시간 ${hourText}`,
-      `활동일: ${dateText}`].join('\n');
+    return [`- ${activity.title}`,
+      `  ${activity.title} 활동에 참여하여 기록된 봉사내용을 수행함.`,
+      `  활동에 필요한 지원과 역할을 맡아 자원봉사에 힘씀.`,
+      `  지역사회에 필요한 봉사활동에 참여하여 도움을 보탬.`].join('\n');
   });
 }
 const normalized = value => clean(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
@@ -119,6 +110,7 @@ $('connectAI').addEventListener('click', async () => {
   } finally { $('connectAI').disabled = false; }
 });
 $('chooseRecords').addEventListener('click',()=> $('timeAuthUpload').click());
+$('downloadExcelForm').addEventListener('click',downloadExcelForm);
 
 function normalizeDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
@@ -147,20 +139,31 @@ function hoursValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-// 엑셀의 활동분야를 우선 반영하고, 다른 분야는 세 공적 분야에 가까운 곳으로 묶는다.
+// 주제는 엑셀의 활동분야와 봉사내용에서 도출한다. 재난·안전·환경·돌봄 등은 고정된 목록으로 제한하지 않는다.
 const themeCues = [
   {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환','em흙공']},
-  {key:'life',words:['생활편의','주거','안전','보호','돌봄','어르신','노인','장애','취약','아동','교통','소방','급식','배식','반찬','김밥','음식','떡','빵','나눔','전달','기부','후원','카네이션','의료','병원','구조','구급']},
-  {key:'culture',words:['문화','체육','예술','관광','축제','공연','연주','합창','음악회','전시','무대','교육','학습','멘토','지도','강의','교실','독서','도서관','행사','안내','운영','홍보','대회','가족봉사단','유학생','체험','통역','공예']}
+  {key:'disaster',words:['재난','재해','수해','복구','침수','폭우','산불','제설','방역','소독','감염병']},
+  {key:'safety',words:['안전','화재','소방','순찰','교통','예방','응급','구조','구급','보호']},
+  {key:'care',words:['돌봄','어르신','노인','장애','취약','아동','청소년','독거','요양','생활편의','주거환경']},
+  {key:'meal',words:['급식','배식','반찬','도시락','식사','떡국','빵나눔','김장','김밥','음식','떡','빵','나눔']},
+  {key:'culture',words:['문화','체육','예술','관광','축제','공연','연주','합창','음악회','전시','무대','행사','안내','운영','홍보','대회','가족봉사단','유학생','체험','통역','공예']},
+  {key:'education',words:['교육','학습','멘토','지도','강의','교실','독서','도서관','기본교육']},
+  {key:'donation',words:['기부','후원','물품','전달','카네이션','기증','성금']},
+  {key:'rural',words:['농촌','농가','일손','수확','모내기','농작업']},
+  {key:'medical',words:['헌혈','보건','의료','건강','병원','검진']},
+  {key:'animal',words:['동물','유기견','유기묘','보호소','반려동물']}
 ];
 function themeKey(record) {
   const area=clean(record.area).toLowerCase(),desc=clean(record.desc).toLowerCase();
   const areaKey=normalized(area);
-  if(/정화|환경보전|환경정화|생태|재활용|플로깅|하천|흙공/.test(desc))return 'environment';
-  if(/주거환경/.test(desc))return 'life';
-  if(/생활|주거|지역안전|안전보호/.test(areaKey))return 'life';
+  if(/정화|환경보전|생태|재활용|플로깅|하천|흙공/.test(desc))return 'environment';
+  if(/주거환경/.test(desc))return 'care';
   if(/환경|생태/.test(areaKey))return 'environment';
-  if(/문화|체육|예술|관광|기본교육/.test(areaKey))return 'culture';
+  if(/재난|재해|방역/.test(areaKey))return 'disaster';
+  if(/안전|화재|소방|교통/.test(areaKey))return 'safety';
+  if(/생활|주거|돌봄|취약/.test(areaKey))return 'care';
+  if(/문화|체육|예술|관광|행사/.test(areaKey))return 'culture';
+  if(/교육|학습/.test(areaKey))return 'education';
   let best='',score=0;
   for(const theme of themeCues) {
     const areaHits=theme.words.filter(word=>area.includes(word)).length;
@@ -168,7 +171,7 @@ function themeKey(record) {
     const value=areaHits*3+descHits;
     if(value>score){score=value;best=theme.key;}
   }
-  return best||'life';
+  return best||(areaKey?`area:${areaKey}`:'care');
 }
 function titleForRows(rows) {
   const areas=new Map();
@@ -184,13 +187,15 @@ function titleForRows(rows) {
   return desc.replace(/\([^)]*\)/g,'').replace(/^(?:\d{4}[.\-]\d{1,2}[.\-]\d{1,2}\s*)/,'').slice(0,28)||'봉사활동';
 }
 function autoGroupRecords() {
-  const buckets=new Map(MERIT_CATEGORIES.map(category=>[category.key,[]]));
+  const buckets=new Map();
   for(const record of records.filter(row=>row.included)){
     const key=themeKey(record);
-    if(buckets.has(key))buckets.get(key).push(record);
+    if(!buckets.has(key))buckets.set(key,[]);
+    buckets.get(key).push(record);
   }
-  const picked=MERIT_CATEGORIES.filter(category=>buckets.get(category.key)?.length).map(category=>[category.key,buckets.get(category.key)]);
-  groups=picked.map(([key])=>({key,title:MERIT_CATEGORIES.find(category=>category.key===key).title,detail:'',short:''}));
+  const sorted=[...buckets].sort((a,b)=>b[1].length-a[1].length);
+  const picked=sorted.length<=MAX_GROUPS?sorted:sorted.slice(0,MAX_GROUPS-1).concat([['combined',sorted.slice(MAX_GROUPS-1).flatMap(([,items])=>items)]]);
+  groups=picked.map(([key,items])=>({key,title:key==='combined'?sorted.slice(MAX_GROUPS-1).slice(0,2).map(([,rows])=>titleForRows(rows)).join('·').slice(0,34)+' 등':titleForRows(items),detail:'',short:''}));
   const keys=new Map();
   picked.forEach(([key,items],index)=>items.forEach(item=>keys.set(item,index)));
   records.forEach(record=>{record.cat=keys.get(record)??Math.max(0,groups.findIndex(group=>group.key===themeKey(record)));});
@@ -272,15 +277,13 @@ function parseCsv(text) {
 
 // 원본 파일의 명시적인 인적사항만 추출한다. 활동기관명 등은 소속으로 추정하지 않는다.
 const personalFieldLabels={
-  name:['성명','봉사자명','회원명','이름'],
-  birth:['생년월일','생일','출생일'],
-  gender:['성별'],
-  org:['소속단체','소속기관','소속'],
-  address:['주소','거주지'],
-  phone:['휴대전화','휴대폰번호','휴대폰','연락처','전화번호'],
-  job:['직업'],
-  rank:['직급'],
-  position:['직위']
+  year:['행사연도','연도'],event:['행사명'],name:['성명','봉사자명','회원명','이름'],hanja:['한자성명','한자이름','한자'],
+  birth:['생년월일','생일','출생일'],gender:['성별'],serviceNo:['군번'],nationality:['국적'],
+  org:['소속단체','소속기관','소속'],job:['직업'],rank:['직급'],position:['직위'],meritField:['공적분야','공적분야명'],
+  address:['주소','집주소','거주지'],phone:['휴대전화','휴대폰번호','휴대폰','연락처','전화번호'],award:['표창','추천훈격','표창훈격','훈격'],order:['추천순위','순위'],
+  investigator:['조사자성명','조사자이름','조사자'],investigatorOrg:['조사자소속'],investigatorRank:['조사자직위','조사자직급'],recommender:['추천관'],docDate:['문서작성일','작성일'],
+  educationDate:['주요학력날짜','학력날짜'],education:['주요학력내용','주요학력','학력'],careerDate:['주요경력날짜','경력날짜'],career:['주요경력내용','주요경력','경력'],
+  historyDate:['과거표창기록날짜','표창기록날짜'],history:['과거표창기록내용','과거표창기록','표창기록내용','표창기록']
 };
 function extractPersonalFields(rows){
   const found={};
@@ -296,7 +299,7 @@ function extractPersonalFields(rows){
       if(inline){const field=identify(inline[1]);if(field&&!found[field])found[field]=clean(inline[2]);}
       const field=identify(cell);
       if(field&&!found[field]){
-        const next=clean(row[i+1]);
+        const nextRaw=row[i+1],next=nextRaw instanceof Date?nextRaw:clean(nextRaw);
         if(next&&!identify(next))found[field]=next;
       }
     }
@@ -312,15 +315,21 @@ function nameFromWorkbookFilename(filename){
   const leading=basename.match(/^([가-힣]{2,5})(?=\s*\(|[_\-\s]|$)/);
   return leading?.[1]||'';
 }
-function applyPersonalFields(info){
+function applyPersonalFields(info,{overwrite=false}={}){
   let filled=0;
+  if(overwrite){
+    for(const id of ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history'])if($(id))$(id).value='';
+    lastAutoName='';
+  }
   for(const [id,raw] of Object.entries(info||{})){
-    const input=$(id);if(!input||!raw||id==='hanja')continue;
-    let value=clean(raw);
+    const input=$(id);if(!input||!raw)continue;
+    const dateField=['docDate','educationDate','careerDate','historyDate'].includes(id);
+    let value=raw instanceof Date||dateField&&typeof raw==='number'?normalizeDate(raw):clean(raw);
     if(id==='gender'){if(/^(여|여성|여자)$/.test(value))value='여';else if(/^(남|남성|남자)$/.test(value))value='남';else continue;}
     if(id==='name'&&!/^[가-힣]{2,5}$/.test(value))continue;
-    if(id==='birth'&&/^[0-9]{8}$/.test(value))value=value.slice(0,4)+'.'+value.slice(4,6)+'.'+value.slice(6);
-    if(input.value&&!(id==='name'&&input.value===lastAutoName))continue;
+    if(id==='birth'){if(/^[0-9]{8}$/.test(value))value=value.slice(0,4)+'.'+value.slice(4,6)+'.'+value.slice(6);else if(/^\d{4}-\d{2}-\d{2}$/.test(value))value=value.replaceAll('-','.');}
+    if(dateField){const match=value.match(/^(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})$/);if(match)value=`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;}
+    if(!overwrite&&input.value&&!(id==='name'&&input.value===lastAutoName))continue;
     input.value=value;filled++;
     if(id==='name')lastAutoName=value;
   }
@@ -332,6 +341,7 @@ async function parseWorkbook(file) {
   const workbook = XLSX.read(await file.arrayBuffer(), {type:'array',cellDates:true});
   const found = [];
   let rejected = 0, hasDescriptionColumn = false, personal={};
+  const isInputTemplate=workbook.SheetNames.some(name=>normalized(name)==='기본정보')&&workbook.SheetNames.some(name=>normalized(name)==='시간인증실적');
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
@@ -339,7 +349,24 @@ async function parseWorkbook(file) {
     personal={...extractPersonalFields(rows),...personal};
     found.push(...parsed.rows); rejected += parsed.rejected; hasDescriptionColumn ||= parsed.hasDescriptionColumn;
   }
-  return {rows:found,rejected,hasDescriptionColumn,personal};
+  return {rows:found,rejected,hasDescriptionColumn,personal,isInputTemplate};
+}
+
+function downloadExcelForm(){
+  if(!window.XLSX){announce('엑셀 양식 기능을 불러오지 못했습니다. 새로고침 후 다시 눌러 주세요.','error');return;}
+  const labels=[
+    ['행사연도','year'],['행사명','event'],['성명','name'],['한자이름','hanja'],['생년월일','birth'],['성별','gender'],['군번','serviceNo'],['국적','nationality'],
+    ['소속','org'],['직업','job'],['직급','rank'],['직위','position'],['공적분야','meritField'],['주소','address'],['연락처','phone'],['표창·훈격','award'],['추천순위','order'],
+    ['조사자 성명','investigator'],['조사자 소속','investigatorOrg'],['조사자 직위','investigatorRank'],['추천관','recommender'],['문서 작성일','docDate'],
+    ['주요 학력 날짜','educationDate'],['주요 학력 내용','education'],['주요 경력 날짜','careerDate'],['주요 경력 내용','career'],['과거 표창기록 날짜','historyDate'],['과거 표창기록 내용','history']
+  ];
+  const guide=[['공적조서 작성용 엑셀 양식'],['1. 기본정보 시트의 B열에 필요한 인적사항을 입력합니다.'],['2. 1365 시간인증 엑셀에서 실적 표 전체를 복사합니다.'],['3. 시간인증 실적 시트의 A1을 누르고 그대로 붙여 넣습니다.'],['4. 이 파일을 저장한 뒤 웹앱에서 작성한 엑셀 불러오기 · 자동 작성을 누릅니다.'],['업로드하면 인적사항과 승인 실적을 함께 읽어 문서 초안을 자동으로 만듭니다.'],['날짜·시간·활동분야·봉사내용 열이 원본에 있어야 공적기간과 분야를 계산할 수 있습니다.']];
+  const wb=XLSX.utils.book_new();
+  const guideSheet=XLSX.utils.aoa_to_sheet(guide);guideSheet['!cols']=[{wch:105}];
+  const basicSheet=XLSX.utils.aoa_to_sheet([['항목','입력 내용'],...labels.map(([label])=>[label,''])]);basicSheet['!cols']=[{wch:26},{wch:48}];basicSheet['!freeze']={xSplit:0,ySplit:1};
+  const recordSheet=XLSX.utils.aoa_to_sheet([['활동분야','봉사일자','봉사시간(시간)','봉사내용','승인상태']]);recordSheet['!cols']=[{wch:28},{wch:18},{wch:20},{wch:60},{wch:14}];recordSheet['!freeze']={xSplit:0,ySplit:1};
+  XLSX.utils.book_append_sheet(wb,guideSheet,'사용 안내');XLSX.utils.book_append_sheet(wb,basicSheet,'기본정보');XLSX.utils.book_append_sheet(wb,recordSheet,'시간인증 실적');
+  XLSX.writeFile(wb,'공적조서_작성용_엑셀양식.xlsx');
 }
 
 function recordKey(record, withDate=true) {
@@ -382,28 +409,36 @@ async function importSingleWorkbook() {
     const valid=parsed.rows.filter(row=>row.approved && row.date && row.hours>0);
     const excluded=parsed.rows.length-valid.length;
     if (!valid.length) throw new Error('날짜·시간이 있는 승인 실적을 찾지 못했습니다.');
-    // 1365 시간인증 원본은 이름이 표 내부에 없고 파일명에만 있는 경우가 많다.
-    // 명시적인 성명 셀을 우선하고, 없으면 파일명 첫 부분의 한글 이름을 사용한다.
-    const filenameName=nameFromWorkbookFilename(timeAuthFile.name);
     const personal={...parsed.personal};
-    // 성명은 반드시 적용 버튼의 확인을 받은 이름만 사용한다.
-    delete personal.name;
-    const filledPersonal=applyPersonalFields(personal);
+    if(parsed.isInputTemplate){
+      if(personal.name&&!/^[가-힣]{2,5}$/.test(clean(personal.name)))throw new Error('기본정보 시트의 한글 성명을 확인해 주세요.');
+    }else{
+      // 원본 실적 파일은 파일명에서 이름을 찾아 한 번 확인합니다.
+      if(!confirmWorkbookNominee())return;
+      delete personal.name;
+    }
+    const filledPersonal=applyPersonalFields(personal,{overwrite:Boolean(parsed.isInputTemplate)});
     records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
     autoGroupRecords();
     lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded};
     $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
     renderRows();renderReferences();
     draftText({announceResult:false});
+    const aiIsReady=isLocalAI||($('aiMode').value==='personal'?Boolean(personalAPIKey):Boolean(sessionStorage.getItem('merit-ai-access-code')));
+    if(aiIsReady)await generateAIDraft({announceResult:false});
     announce(`원본 엑셀 한 개에서 ${records.length}건, 총 ${records.reduce((sum,row)=>sum+row.hours,0).toFixed(1)}시간을 확인했습니다. 실제 활동에 맞는 ${groups.length}개 분야와 공적조서 초안을 자동 작성했습니다.`);
   } catch(error) { announce(error.message||'원본 엑셀을 읽지 못했습니다.','error'); }
 }
-$('timeAuthUpload').addEventListener('change',event=>{
+$('timeAuthUpload').addEventListener('change',async event=>{
   timeAuthFile=event.target.files?.[0]||null;
   $('timeAuthFileName').textContent=timeAuthFile?.name||'선택 안 됨';
-  if(timeAuthFile) announce('엑셀을 선택했습니다. 적용 버튼을 누르면 성명을 확인한 후 반영합니다.');
   $('applyWorkbook').disabled=!timeAuthFile;
-  if(timeAuthFile) announce('엑셀파일을 선택했습니다. ‘엑셀 분석·반영하기’를 누르면 공적내용을 작성합니다.');
+  if(timeAuthFile){
+    announce('엑셀 한 개에서 인적사항과 봉사실적을 읽어 문서 초안을 만들고 있습니다…');
+    $('applyAllWorkbook').disabled=true;
+    try{await importSingleWorkbook();}
+    finally{$('applyAllWorkbook').disabled=false;event.target.value='';}
+  }
 });
 function confirmWorkbookNominee(){
   const filenameName=nameFromWorkbookFilename(timeAuthFile?.name||'');
@@ -420,14 +455,12 @@ function confirmWorkbookNominee(){
 }
 $('applyAllWorkbook').addEventListener('click',async()=>{
   if(!timeAuthFile){announce('먼저 원본 봉사실적 엑셀 파일을 선택해 주세요.','error');$('timeAuthUpload').click();return;}
-  if(!confirmWorkbookNominee())return;
   const button=$('applyAllWorkbook');button.disabled=true;button.textContent='전체 내용 적용 중…';
   try {await importSingleWorkbook();}
   finally {button.disabled=false;button.textContent='전체 내용에 적용';}
 });
 $('applyWorkbook').addEventListener('click',async()=>{
   if(!timeAuthFile){announce('먼저 원본 엑셀을 선택해 주세요.','error');return;}
-  if(!confirmWorkbookNominee())return;
   const button=$('applyWorkbook');button.disabled=true;button.textContent='엑셀 분석 중…';
   try {await importSingleWorkbook();}
   finally {button.disabled=false;button.textContent='엑셀 분석·반영하기';}
@@ -495,7 +528,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 제목 3개 · 제목마다 설명 3줄)</label><textarea data-group="${index}" data-key="detail" rows="14" placeholder="활동 제목 다음 줄부터 설명을 세 줄 적어요. 다음 활동 제목은 •로 시작해요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 제목 최대 3개 · 제목마다 설명 3줄)</label><textarea data-group="${index}" data-key="detail" rows="14" placeholder="- 활동 제목을 쓰고, 다음 줄부터 설명을 세 줄 적어요. 활동 주제는 엑셀 실적에 맞춰 나뉩니다.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
@@ -522,11 +555,17 @@ $('regroup').addEventListener('click',()=>{
   announce(`실제 활동내용을 다시 분석해 ${groups.length}개 분야의 제목과 공적내용을 작성했습니다. 확인 후 필요한 부분만 수정하세요.`);
 });
 
-const FIXED_MATCHING = '-공적내용과일치함';
+const FIXED_MATCHING = '-공적내용과 일치함';
 function fieldInvestigationDraft(rows) {
+  const groupsWithRows=groups.map((group,index)=>({group,rows:rows.filter(row=>row.cat===index)})).filter(item=>item.rows.length);
+  const topics=groupsWithRows.slice(0,3).map(item=>item.group.title).filter(Boolean);
+  const activities=groupsWithRows.map(item=>compactMeritSummary(item.rows,1)[0]).filter(Boolean).slice(0,3);
+  const topicText=topics.join('·')||'자원봉사';
+  const activityText=activities.join('·')||'지역사회 봉사활동';
+  const outcomes=[...new Set(groupsWithRows.map(item=>contributionFor(item.rows,item.group.title)))].slice(0,2).join(' 및 ')||'지역사회 발전';
   return {
-    character:'평소 성실하고 책임감 있는 자세로 자원봉사활동에 꾸준히 참여함.',
-    reputation:'지역사회 나눔과 봉사활동에 지속적으로 참여하여 이웃사랑을 실천함.'
+    character:`${topicText} 분야의 ${activityText} 등 봉사활동에 참여하며 맡은 역할을 성실히 수행함.`,
+    reputation:`${activityText} 활동에 참여하여 ${outcomes}에 힘쓰는 등 지역사회 봉사에 기여함.`
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
@@ -620,7 +659,7 @@ function draftText({announceResult=true}={}) {
   $('reputation').value=investigation.reputation;
   $('matching').value=FIXED_MATCHING;
   updateCharacterCount();
-  if (announceResult) announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동 횟수와 문구를 원자료·증빙과 대조해 수정하세요.');
+  if (announceResult) announce('실적에 적힌 내용을 바탕으로 초안을 만들었습니다. 활동내용과 문구를 원자료와 확인해 주세요.');
   return true;
 }
 async function generateAIDraft({announceResult=true}={}) {
@@ -651,13 +690,13 @@ async function generateAIDraft({announceResult=true}={}) {
     if (!response.ok) throw new Error(resultBody.error||'AI 초안을 만들지 못했습니다.');
     const result=resultBody;
     if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string'||typeof result.character!=='string'||typeof result.reputation!=='string'||typeof result.matching!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
-    groups=groups.map((group,index)=>({...group,detail:limitMeritDetail(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
+    groups=groups.map((group,index)=>({...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
     const investigation=fieldInvestigationDraft(selected());
     $('character').value=investigation.character;
     $('reputation').value=investigation.reputation;
     $('matching').value=FIXED_MATCHING;
-    renderGroups(); updateCharacterCount();
+    renderRows(); renderGroups(); updateCharacterCount();
     if (announceResult) announce('AI가 승인된 시간인증 실적만 바탕으로 초안을 만들었습니다. 문구와 실적을 증빙자료와 대조해 주세요.');
     return true;
   } catch (error) {
