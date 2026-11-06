@@ -1,6 +1,11 @@
 const $ = (id) => document.getElementById(id);
 const fieldIds = ['year','event','name','hanja','birth','gender','serviceNo','nationality','org','job','rank','position','meritField','address','phone','award','order','investigator','investigatorOrg','investigatorRank','recommender','docDate','educationDate','education','careerDate','career','historyDate','history','gist','intro','character','reputation','matching'];
-const MAX_GROUPS = 4;
+const MAX_GROUPS = 3;
+const MERIT_CATEGORIES = [
+  {key:'environment',title:'환경·생태계보호'},
+  {key:'life',title:'생활편의'},
+  {key:'culture',title:'문화·체육·예술·관광'}
+];
 let records = [];
 let groups = []; // 분야는 미리 채우지 않고 업로드된 봉사실적에서 도출한다.
 let stamp = null;
@@ -12,7 +17,7 @@ let personalAPIKey = '';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
 const MAX_MERIT_ITEMS = 3;
-const MAX_MERIT_ITEM_LINES = 3;
+const MAX_MERIT_ITEM_LINES = 4; // 활동 제목 1줄 + 설명 3줄
 const MAX_MERIT_LINE_CHARS = 55;
 function limitMeritDetail(value) {
   const items=[];
@@ -26,16 +31,23 @@ function limitMeritDetail(value) {
   return items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n');
 }
 function detailedMeritItems(rows) {
-  const seen=new Set(),items=[];
+  const activities=new Map();
   for(const row of rows){
-    const phrase=String(row.desc||'').replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'').replace(/\([^)]*\)/g,' ').replace(/\[[^\]]*\]/g,' ').replace(/\b\d{1,2}:\d{2}\b/g,' ').replace(/\s+/g,' ').replace(/[.。]+$/,'').trim();
-    const key=normalized(phrase);
-    if(!key||seen.has(key))continue;
-    seen.add(key);
-    items.push(`• ${Array.from(phrase).slice(0,MAX_MERIT_LINE_CHARS-2).join('')}`);
-    if(items.length===MAX_MERIT_ITEMS)break;
+    const title=String(row.desc||'').replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'').replace(/\s+/g,' ').replace(/[.。]+$/,'').trim();
+    const key=normalized(title);if(!key)continue;
+    if(!activities.has(key))activities.set(key,{title,rows:[],first:activities.size});
+    activities.get(key).rows.push(row);
   }
-  return items;
+  return [...activities.values()].sort((a,b)=>b.rows.length-a.rows.length||a.first-b.first).slice(0,MAX_MERIT_ITEMS).map(activity=>{
+    const dates=[...new Set(activity.rows.map(row=>row.date).filter(Boolean))];
+    const hours=activity.rows.reduce((sum,row)=>sum+Number(row.hours||0),0);
+    const dateText=dates.length?dates.slice(0,3).map(date=>String(date).replace(/-/g,'.')).join(', ')+(dates.length>3?' 등':''):'원자료에 활동일 없음';
+    const hourText=hours?readableHours(hours):'시간 미기재';
+    return [`• ${activity.title}`,
+      `활동내용: ${activity.title}`,
+      `참여실적: ${activity.rows.length}회 · 인정시간 ${hourText}`,
+      `활동일: ${dateText}`].join('\n');
+  });
 }
 const normalized = value => clean(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
 const val = id => clean($(id).value);
@@ -135,24 +147,20 @@ function hoursValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-// 내부 분석 단서는 여러 활동 유형을 포괄하지만, 화면에 고정된 분야는 없다.
-// 제목은 각 봉사자의 엑셀에 실제로 기재된 '활동분야'와 '봉사내용'에서 도출한다.
+// 엑셀의 활동분야를 우선 반영하고, 다른 분야는 세 공적 분야에 가까운 곳으로 묶는다.
 const themeCues = [
-  {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환']},
-  {key:'arts',words:['공연','위안공연','연주','합창','음악회','예술','문화','축제','전시','무대']},
-  {key:'disaster',words:['재난','재해','수해','복구','침수','폭우','산불','제설','방역','소독','감염병']},
-  {key:'care',words:['어르신','노인','장애','돌봄','말벗','요양','취약','아동','청소년','독거']},
-  {key:'meal',words:['급식','배식','반찬','도시락','식사','떡국','빵나눔','김장','무료급식']},
-  {key:'safety',words:['안전','소방','화재','순찰','교통','예방','응급','구조','구급']},
-  {key:'education',words:['교육','학습','멘토','지도','강의','교실','독서','도서관']},
-  {key:'donation',words:['기부','나눔','후원','물품','전달','카네이션','기증','성금']},
-  {key:'event',words:['행사','안내','운영','캠페인','홍보','접수','축하','대회','체육']},
-  {key:'rural',words:['농촌','농가','일손','수확','모내기','농작업']},
-  {key:'medical',words:['헌혈','보건','의료','건강','병원','검진']},
-  {key:'animal',words:['동물','유기견','유기묘','보호소','반려동물']}
+  {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환','em흙공']},
+  {key:'life',words:['생활편의','주거','안전','보호','돌봄','어르신','노인','장애','취약','아동','교통','소방','급식','배식','반찬','김밥','음식','떡','빵','나눔','전달','기부','후원','카네이션','의료','병원','구조','구급']},
+  {key:'culture',words:['문화','체육','예술','관광','축제','공연','연주','합창','음악회','전시','무대','교육','학습','멘토','지도','강의','교실','독서','도서관','행사','안내','운영','홍보','대회','가족봉사단','유학생','체험','통역','공예']}
 ];
 function themeKey(record) {
   const area=clean(record.area).toLowerCase(),desc=clean(record.desc).toLowerCase();
+  const areaKey=normalized(area);
+  if(/정화|환경보전|환경정화|생태|재활용|플로깅|하천|흙공/.test(desc))return 'environment';
+  if(/주거환경/.test(desc))return 'life';
+  if(/생활|주거|지역안전|안전보호/.test(areaKey))return 'life';
+  if(/환경|생태/.test(areaKey))return 'environment';
+  if(/문화|체육|예술|관광|기본교육/.test(areaKey))return 'culture';
   let best='',score=0;
   for(const theme of themeCues) {
     const areaHits=theme.words.filter(word=>area.includes(word)).length;
@@ -160,7 +168,7 @@ function themeKey(record) {
     const value=areaHits*3+descHits;
     if(value>score){score=value;best=theme.key;}
   }
-  return best||('activity:'+normalized(record.area||record.desc).slice(0,16));
+  return best||'life';
 }
 function titleForRows(rows) {
   const areas=new Map();
@@ -176,15 +184,13 @@ function titleForRows(rows) {
   return desc.replace(/\([^)]*\)/g,'').replace(/^(?:\d{4}[.\-]\d{1,2}[.\-]\d{1,2}\s*)/,'').slice(0,28)||'봉사활동';
 }
 function autoGroupRecords() {
-  const buckets=new Map();
-  for(const record of records.filter(row=>row.included)) {
+  const buckets=new Map(MERIT_CATEGORIES.map(category=>[category.key,[]]));
+  for(const record of records.filter(row=>row.included)){
     const key=themeKey(record);
-    if(!buckets.has(key)) buckets.set(key,[]);
-    buckets.get(key).push(record);
+    if(buckets.has(key))buckets.get(key).push(record);
   }
-  const sorted=[...buckets].sort((a,b)=>b[1].length-a[1].length);
-  const picked=sorted.length<=MAX_GROUPS?sorted:sorted.slice(0,MAX_GROUPS-1).concat([['combined',sorted.slice(MAX_GROUPS-1).flatMap(([,items])=>items)]]);
-  groups=picked.map(([key,items])=>({key,title:key==='combined' ? sorted.slice(MAX_GROUPS-1).slice(0,2).map(([,rows])=>titleForRows(rows)).join('·').slice(0,34)+' 등' : titleForRows(items),detail:'',short:''}));
+  const picked=MERIT_CATEGORIES.filter(category=>buckets.get(category.key)?.length).map(category=>[category.key,buckets.get(category.key)]);
+  groups=picked.map(([key])=>({key,title:MERIT_CATEGORIES.find(category=>category.key===key).title,detail:'',short:''}));
   const keys=new Map();
   picked.forEach(([key,items],index)=>items.forEach(item=>keys.set(item,index)));
   records.forEach(record=>{record.cat=keys.get(record)??Math.max(0,groups.findIndex(group=>group.key===themeKey(record)));});
@@ -489,7 +495,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적에 따라 최대 3건 · 건별 3줄 이내)</label><textarea data-group="${index}" data-key="detail" rows="10" placeholder="실제 공적 한 건당 최대 세 줄로 작성해요. 다음 공적은 •로 시작해요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 제목 3개 · 제목마다 설명 3줄)</label><textarea data-group="${index}" data-key="detail" rows="14" placeholder="활동 제목 다음 줄부터 설명을 세 줄 적어요. 다음 활동 제목은 •로 시작해요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
@@ -597,7 +603,7 @@ function draftText({announceResult=true}={}) {
     if(!rows.length){group.detail='';group.short='';return;}
     const summary=compactMeritSummary(rows,MAX_MERIT_ITEMS).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
     const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
-    // 기본 작성은 확인된 실적만 3건까지 표시한다. AI를 쓰면 건별 상세 문장을 덧붙인다.
+    // 실제 활동 분야별로 서로 다른 활동 제목을 최대 3개 고르고, 제목마다 실적 근거 세 줄을 붙인다.
     group.detail=limitMeritDetail(detailedMeritItems(rows).join('\n\n'));
     group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
 
@@ -807,22 +813,20 @@ function replaceTemplateTextWithBreaks(doc, search, replacement) {
     collect(paragraph);
     const joined=nodes.map(node=>node.textContent||'').join(''),index=joined.indexOf(search);
     if(index<0)continue;
-    const prefix=joined.slice(0,index),suffix=joined.slice(index+search.length),first=nodes[0];
-    if(!first)return;
-    for(const node of nodes)node.textContent='';
-    first.textContent=prefix+(lines[0]||'');
-    const run=first.parentElement;
-    if(!run)return;
-    const cursor=first.nextSibling;
-    for(let lineIndex=1;lineIndex<lines.length;lineIndex++){
-      const lineBreak=doc.createElementNS(HWP_NS.hp,'hp:lineBreak');
-      run.insertBefore(lineBreak,cursor);
-      const textNode=doc.createElementNS(HWP_NS.hp,'hp:t');
-      textNode.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');
-      textNode.textContent=lines[lineIndex]||'';
-      run.insertBefore(textNode,cursor);
+    const parent=paragraph.parentNode,firstRun=paragraph.getElementsByTagNameNS(HWP_NS.hp,'run')[0];
+    if(!parent||!firstRun)return;
+    const prefix=joined.slice(0,index),suffix=joined.slice(index+search.length);
+    lines[0]=(prefix.trimEnd()?prefix.trimEnd()+' ':'')+(lines[0]||'');
+    lines[lines.length-1]=(lines.at(-1)||'')+suffix;
+    for(const line of lines){
+      const nextParagraph=paragraph.cloneNode(false);
+      const run=firstRun.cloneNode(false);
+      const text=doc.createElementNS(HWP_NS.hp,'hp:t');
+      text.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');
+      text.textContent=line;
+      run.appendChild(text);nextParagraph.appendChild(run);parent.insertBefore(nextParagraph,paragraph);
     }
-    if(suffix){const tail=doc.createElementNS(HWP_NS.hp,'hp:t');tail.textContent=suffix;run.insertBefore(tail,cursor);}
+    parent.removeChild(paragraph);
     return;
   }
   throw new Error(`원본 한글 서식에서 입력 위치를 찾지 못했습니다: ${search}`);
