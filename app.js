@@ -11,9 +11,9 @@ let personalAPIKey = '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
-const MAX_MERIT_ITEMS = 3;
-const MAX_MERIT_ITEM_LINES = 4; // 활동 제목 1줄 + 설명 3줄
-const MAX_MERIT_LINE_CHARS = 120;
+const MAX_MERIT_ITEMS = 1;
+const MAX_MERIT_ITEM_LINES = 1; // 분야별로 활동을 묶은 한 문단
+const MAX_MERIT_LINE_CHARS = 480;
 function limitMeritDetail(value) {
   const items=[];
   for(const rawLine of String(value??'').replace(/\r/g,'').split('\n')){
@@ -25,102 +25,25 @@ function limitMeritDetail(value) {
   }
   return items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n');
 }
-function detailedMeritItems(rows) {
-  const activities=new Map();
-  for(const row of rows){
-    const title=String(row.desc||'').replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'').replace(/\s+/g,' ').replace(/[.。]+$/,'').trim();
-    const key=normalized(title);if(!key)continue;
-    if(!activities.has(key))activities.set(key,{title,rows:[],first:activities.size});
-    activities.get(key).rows.push(row);
-  }
-  return [...activities.values()].sort((a,b)=>b.rows.length-a.rows.length||a.first-b.first).slice(0,MAX_MERIT_ITEMS).map(activity=>{
-    return [`- ${activity.title}`,...meritNarrative(activity).map(sentence=>`  ${sentence}`)].join('\n');
-  });
+function synthesizedMerit(rows,title='') {
+  const text=rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
+  const source=`${title} ${text}`;
+  const themes=[];
+  if(/환경|정화|재활용|분리배출|탄소|자원순환|생태|식목|나무심기|꽃심기/.test(source)) themes.push('환경을 보전하고 자원순환을 실천해 쾌적한 생활환경 조성과 환경보호 의식 확산에 힘쓰며');
+  if(/재난|재해|수해|복구|방역|소독|감염병/.test(source)) themes.push('재난 대응과 방역 등 주민 안전을 위한 봉사로 이웃의 회복과 안전한 생활 기반을 뒷받침하며');
+  if(/안전|화재|소방|교통|구조|예방/.test(source)) themes.push('지역 안전을 지키는 봉사로 주민 보호와 안전 의식 확산을 뒷받침하며');
+  if(/문화|축제|행사|공연|예술|관광|음악회/.test(source)) themes.push('지역 문화행사 지원을 통해 주민의 문화 향유와 지역문화 활성화를 돕고');
+  if(/취약|돌봄|어르신|유학생|나눔|급식|반찬|음식|의료|건강|카네이션|빵/.test(source)) themes.push('이웃 돌봄과 나눔을 실천해 주민 간 관심과 연대를 넓히며');
+  if(/생활편의|주거|생활지원|물품지원|편의/.test(source)) themes.push('주민 생활에 필요한 지원을 보태어 일상 편의와 지역 복지 증진을 돕고');
+  if(/교육|학습|멘토|상담/.test(source)) themes.push('배움과 성장을 돕는 봉사로 주민 역량 향상과 상호 협력을 북돋으며');
+  if(/봉사|지원|활동/.test(source)&&!themes.length) themes.push('지역사회에 필요한 봉사에 참여해 이웃에게 필요한 도움을 보태며');
+  if(!themes.length) themes.push('실적에 나타난 봉사활동으로 주민에게 필요한 도움을 보태며');
+  const detail=`- ${themes.join(' ')} 지역공동체의 발전에 기여함.`;
+  const short=detail.slice(2);
+  return {detail,short};
 }
-function meritNarrative(activity){
-  const title=clean(activity.title);
-  const source=activity.rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
-  const text=`${title} ${source}`;
-  const placeMatch=title.match(/[（(]([^）)]+)[）)]/);
-  let place=placeMatch?.[1]?.trim()||'';
-  place=place.replace(/\s*[~～]\s*/g,'부터 ').replace(/부터 (.+)$/,'부터 $1까지');
-
-  const madeFor=title.match(/^(.+?)\s+만들어\s+(.+?)(에게|에)\s*(?:나눔|전달|배부)/);
-  const madeForNeed=title.match(/^(.+?)(?:을|를)\s+위한\s+(.+?)\s+만들어/);
-  const food=/(달고나|김밥|밑반찬|반찬|떡국|빵|도시락|급식|간식|먹거리|음식)/.test(text);
-  if(food&&(/나눔|나누|전달/.test(text))){
-    const product=madeFor?.[1]?.trim()||madeForNeed?.[2]?.trim()||title.match(/(달고나(?:\s*뽑기)?|김밥|밑반찬|반찬|떡국|사랑의 빵|빵|도시락|간식)/)?.[0]||'';
-    const target=madeFor?.[2]?.trim()||madeForNeed?.[1]?.trim()||'';
-    const targetParticle=madeFor?.[3]||'';
-    const productParticle=value=>{
-      const last=Array.from(value).at(-1)||'';
-      const code=last.charCodeAt(0)-0xAC00;
-      return code>=0&&code<=11171&&(code%28)!==0?'을':'를';
-    };
-    if(/유학생/.test(text))return [
-      `${target||'유학생'}${targetParticle||'에게'} 따뜻한 나눔을 전하기 위해 ${product||'간식'}${productParticle(product||'간식')} 정성껏 만들어 나누는 활동에 참여함.`,
-      `직접 준비한 ${product||'간식'}을 전하며 유학생들에게 환대와 관심을 나눔.`,
-      '이를 통해 이웃과 온정을 나누고 서로를 존중하는 지역공동체 형성에 기여함.'
-    ];
-    if(/소방서|소방대|소방관/.test(text))return [
-      `지역의 안전을 위해 힘쓰는 소방 관계자들에게 감사와 응원을 전하고자 ${product||'먹거리'} 나눔 활동에 참여함.`,
-      `${product||'먹거리'}${productParticle(product||'먹거리')} 직접 만들어 ${target||'소방서'}에 전달하며 고마운 마음과 격려를 전함.`,
-      '이를 통해 지역 안전을 지키는 이웃을 응원하고 공동체 나눔문화 확산에 기여함.'
-    ];
-    if(/취약계층|어르신|독거노인/.test(text))return [
-      `${target||'이웃'}의 식생활을 돕기 위해 ${product||'밑반찬'} 나눔 활동에 참여함.`,
-      `${product||'밑반찬'}을 정성껏 만들어 전달하며 이웃을 살피고 따뜻한 마음을 나눔.`,
-      '이를 통해 생활에 필요한 도움을 보태고 지역사회 돌봄과 나눔 확산에 기여함.'
-    ];
-    const recipient=target?`${target}${targetParticle}`:'이웃에게';
-    return [
-      `${recipient} 온정을 전하기 위해 ${product?`${product}${productParticle(product)} `:''}만들어 나누는 봉사활동에 참여함.`,
-      `${product?`${product}${productParticle(product)} 정성껏 준비해 `:''}${recipient} 전달하며 나눔의 마음을 실천함.`,
-      `이를 통해 이웃에게 필요한 도움을 보태고 ${contributionFor(activity.rows,'')}에 기여함.`
-    ];
-  }
-  if(/환경정화|쓰레기수거|플로깅|환경보호/.test(text)){
-    const where=place?(place.endsWith('까지')?`${place} 이어지는 구간에서`:`${place}에서`):'지역의 생활 주변에서';
-    return [
-      `${where} 쾌적한 환경을 가꾸기 위한 환경정화 활동에 참여함.`,
-      '주변을 살피며 버려진 쓰레기 등을 정리해 생활 공간을 깨끗하게 가꿈.',
-      '이를 통해 주민이 쾌적하게 이용할 수 있는 환경을 조성하고 환경보호 실천에 기여함.'
-    ];
-  }
-  if(/식목|나무심기|꽃심기|화단/.test(text))return [
-    '지역의 녹지와 쾌적한 생활환경을 가꾸기 위한 식목 활동에 참여함.',
-    '나무와 꽃을 심고 주변을 정돈하며 생활 속 녹지 조성에 힘씀.',
-    '이를 통해 지역 경관을 아름답게 하고 주민이 함께 누리는 환경 조성에 기여함.'
-  ];
-  if(/수해|집중호우|재난|재해|피해복구|복구활동/.test(text))return [
-    '재난 피해를 입은 주민의 일상 회복을 돕기 위한 복구 봉사에 참여함.',
-    '피해 현장에서 기록된 복구 활동을 수행하며 이웃의 어려움을 함께 나눔.',
-    '이를 통해 피해 주민의 회복을 지원하고 지역공동체가 다시 일어서는 데 기여함.'
-  ];
-  if(/방역|소독|감염병/.test(text))return [
-    '주민의 건강과 안전을 지키기 위한 방역·소독 활동에 참여함.',
-    '공공장소와 다중이용시설 등 기록에 있는 장소를 중심으로 방역 활동을 수행함.',
-    '이를 통해 감염병 예방과 안전한 지역 생활환경 조성에 기여함.'
-  ];
-  if(/축제|문화행사|문화제|예술제|음악회/.test(text)){
-    const role=/안내|질서|방문객|관람객/.test(text)?'방문객 안내와 행사 질서 유지 등 맡은 역할을 수행함.':'행사 운영에 필요한 현장 지원을 맡아 원활한 진행을 도움.';
-    return [
-      '지역 문화행사의 원활한 개최를 돕기 위한 자원봉사활동에 참여함.',
-      role,
-      '이를 통해 방문객의 편의를 돕고 지역문화 활성화와 행사의 성공적인 개최에 기여함.'
-    ];
-  }
-  if(/카네이션|떡국|빵나눔|사랑의 빵|어버이날|어르신/.test(text))return [
-    '이웃에게 감사와 따뜻한 마음을 전하기 위한 나눔 활동에 참여함.',
-    `${title.replace(/[.。]+$/,'')} 활동을 통해 어르신과 이웃을 살피고 정을 나눔.`,
-    '이를 통해 이웃사랑을 실천하고 따뜻한 지역공동체 조성에 기여함.'
-  ];
-  const area=clean(activity.rows.find(row=>clean(row.area))?.area)||'지역사회';
-  return [
-    `${area} 분야의 ${title} 활동에 참여하여 지역사회에 필요한 봉사를 실천함.`,
-    `활동 현장에서 맡은 일을 수행하며 ${area} 분야에 필요한 지원을 보탬.`,
-    `이를 통해 ${contributionFor(activity.rows,area)}에 기여함.`
-  ];
+function detailedMeritItems(rows,title='') {
+  return [synthesizedMerit(rows,title).detail];
 }
 const normalized = value => clean(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
 const val = id => clean($(id).value);
@@ -676,7 +599,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 제목 최대 3개 · 제목마다 설명 3줄)</label><textarea data-group="${index}" data-key="detail" rows="14" placeholder="- 활동 제목을 쓰고, 다음 줄부터 설명을 세 줄 적어요. 활동 주제는 엑셀 실적에 맞춰 나뉩니다.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적을 종합한 공적 문단)</label><textarea data-group="${index}" data-key="detail" rows="8" placeholder="이 분야의 봉사실적을 종합해 지역사회에 준 도움과 기여를 한 문단으로 적어요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
@@ -788,11 +711,9 @@ function draftText({announceResult=true}={}) {
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     if(!rows.length){group.detail='';group.short='';return;}
-    const summary=compactMeritSummary(rows,MAX_MERIT_ITEMS).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
-    const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
-    // 실제 활동 분야별로 서로 다른 활동 제목을 최대 3개 고르고, 제목마다 실적 근거 세 줄을 붙인다.
-    group.detail=limitMeritDetail(detailedMeritItems(rows).join('\n\n'));
-    group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
+    const synthesized=synthesizedMerit(rows,group.title);
+    group.detail=limitMeritDetail(synthesized.detail);
+    group.short=synthesized.short;
 
   });
   renderGroups();
@@ -841,7 +762,8 @@ async function generateAIDraft({announceResult=true}={}) {
     const narrativeRecords=selected();
     groups=groups.map((group,index)=>{
       const rows=narrativeRecords.filter(record=>record.cat===index);
-      return {...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(detailedMeritItems(rows).join('\n\n')),short:clean(result.groups[index]?.short)};
+      const synthesized=synthesizedMerit(rows,group.title);
+      return {...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(synthesized.detail),short:synthesized.short};
     });
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
     const investigation=fieldInvestigationDraft(selected());
