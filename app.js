@@ -290,10 +290,7 @@ const personalFieldLabels={
 };
 function extractPersonalFields(rows){
   const found={};
-  const identify=label=>{
-    const key=normalized(label).replace(/[:：]/g,'');
-    return Object.entries(personalFieldLabels).find(([,aliases])=>aliases.some(alias=>normalized(alias)===key))?.[0];
-  };
+  const identify=identifyPersonalField;
   for(const row of rows.slice(0,45)){
     if(!Array.isArray(row))continue;
     for(let i=0;i<row.length;i++){
@@ -306,6 +303,20 @@ function extractPersonalFields(rows){
         if(next&&!identify(next))found[field]=next;
       }
     }
+  }
+  return found;
+}
+function identifyPersonalField(label){
+  const key=normalized(label).replace(/[:：]/g,'');
+  return Object.entries(personalFieldLabels).find(([,aliases])=>aliases.some(alias=>normalized(alias)===key))?.[0];
+}
+function extractTemplatePersonalFields(rows){
+  const found={};
+  for(const row of rows){
+    if(!Array.isArray(row))continue;
+    const field=identifyPersonalField(row[0]);
+    const value=row[1];
+    if(field&&value!==undefined&&value!==null&&clean(value)!=='')found[field]=value;
   }
   return found;
 }
@@ -348,7 +359,11 @@ async function parseWorkbook(file) {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
-    personal={...extractPersonalFields(rows),...personal};
+    if(isInputTemplate){
+      if(normalized(sheetName)==='기본정보')personal=extractTemplatePersonalFields(rows);
+    }else{
+      personal={...extractPersonalFields(rows),...personal};
+    }
     if(isInputTemplate&&normalized(sheetName)!=='시간인증실적')continue;
     const parsed = rowsToRecords(rows,`${file.name} · ${sheetName}`);
     found.push(...parsed.rows); rejected += parsed.rejected; hasDescriptionColumn ||= parsed.hasDescriptionColumn;
