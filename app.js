@@ -34,11 +34,93 @@ function detailedMeritItems(rows) {
     activities.get(key).rows.push(row);
   }
   return [...activities.values()].sort((a,b)=>b.rows.length-a.rows.length||a.first-b.first).slice(0,MAX_MERIT_ITEMS).map(activity=>{
-    return [`- ${activity.title}`,
-      `  ${activity.title} 활동에 참여하여 기록된 봉사내용을 수행함.`,
-      `  활동에 필요한 지원과 역할을 맡아 자원봉사에 힘씀.`,
-      `  지역사회에 필요한 봉사활동에 참여하여 도움을 보탬.`].join('\n');
+    return [`- ${activity.title}`,...meritNarrative(activity).map(sentence=>`  ${sentence}`)].join('\n');
   });
+}
+function meritNarrative(activity){
+  const title=clean(activity.title);
+  const source=activity.rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
+  const text=`${title} ${source}`;
+  const placeMatch=title.match(/[（(]([^）)]+)[）)]/);
+  let place=placeMatch?.[1]?.trim()||'';
+  place=place.replace(/\s*[~～]\s*/g,'부터 ').replace(/부터 (.+)$/,'부터 $1까지');
+
+  const madeFor=title.match(/^(.+?)\s+만들어\s+(.+?)(에게|에)\s*(?:나눔|전달|배부)/);
+  const madeForNeed=title.match(/^(.+?)(?:을|를)\s+위한\s+(.+?)\s+만들어/);
+  const food=/(달고나|김밥|밑반찬|반찬|떡국|빵|도시락|급식|간식|먹거리|음식)/.test(text);
+  if(food&&(/나눔|나누|전달/.test(text))){
+    const product=madeFor?.[1]?.trim()||madeForNeed?.[2]?.trim()||title.match(/(달고나(?:\s*뽑기)?|김밥|밑반찬|반찬|떡국|사랑의 빵|빵|도시락|간식)/)?.[0]||'';
+    const target=madeFor?.[2]?.trim()||madeForNeed?.[1]?.trim()||'';
+    const targetParticle=madeFor?.[3]||'';
+    const productParticle=value=>{
+      const last=Array.from(value).at(-1)||'';
+      const code=last.charCodeAt(0)-0xAC00;
+      return code>=0&&code<=11171&&(code%28)!==0?'을':'를';
+    };
+    if(/유학생/.test(text))return [
+      `${target||'유학생'}${targetParticle||'에게'} 따뜻한 나눔을 전하기 위해 ${product||'간식'}${productParticle(product||'간식')} 정성껏 만들어 나누는 활동에 참여함.`,
+      `직접 준비한 ${product||'간식'}을 전하며 유학생들에게 환대와 관심을 나눔.`,
+      '이를 통해 이웃과 온정을 나누고 서로를 존중하는 지역공동체 형성에 기여함.'
+    ];
+    if(/소방서|소방대|소방관/.test(text))return [
+      `지역의 안전을 위해 힘쓰는 소방 관계자들에게 감사와 응원을 전하고자 ${product||'먹거리'} 나눔 활동에 참여함.`,
+      `${product||'먹거리'}${productParticle(product||'먹거리')} 직접 만들어 ${target||'소방서'}에 전달하며 고마운 마음과 격려를 전함.`,
+      '이를 통해 지역 안전을 지키는 이웃을 응원하고 공동체 나눔문화 확산에 기여함.'
+    ];
+    if(/취약계층|어르신|독거노인/.test(text))return [
+      `${target||'이웃'}의 식생활을 돕기 위해 ${product||'밑반찬'} 나눔 활동에 참여함.`,
+      `${product||'밑반찬'}을 정성껏 만들어 전달하며 이웃을 살피고 따뜻한 마음을 나눔.`,
+      '이를 통해 생활에 필요한 도움을 보태고 지역사회 돌봄과 나눔 확산에 기여함.'
+    ];
+    const recipient=target?`${target}${targetParticle}`:'이웃에게';
+    return [
+      `${recipient} 온정을 전하기 위해 ${product?`${product}${productParticle(product)} `:''}만들어 나누는 봉사활동에 참여함.`,
+      `${product?`${product}${productParticle(product)} 정성껏 준비해 `:''}${recipient} 전달하며 나눔의 마음을 실천함.`,
+      `이를 통해 이웃에게 필요한 도움을 보태고 ${contributionFor(activity.rows,'')}에 기여함.`
+    ];
+  }
+  if(/환경정화|쓰레기수거|플로깅|환경보호/.test(text)){
+    const where=place?(place.endsWith('까지')?`${place} 이어지는 구간에서`:`${place}에서`):'지역의 생활 주변에서';
+    return [
+      `${where} 쾌적한 환경을 가꾸기 위한 환경정화 활동에 참여함.`,
+      '주변을 살피며 버려진 쓰레기 등을 정리해 생활 공간을 깨끗하게 가꿈.',
+      '이를 통해 주민이 쾌적하게 이용할 수 있는 환경을 조성하고 환경보호 실천에 기여함.'
+    ];
+  }
+  if(/식목|나무심기|꽃심기|화단/.test(text))return [
+    '지역의 녹지와 쾌적한 생활환경을 가꾸기 위한 식목 활동에 참여함.',
+    '나무와 꽃을 심고 주변을 정돈하며 생활 속 녹지 조성에 힘씀.',
+    '이를 통해 지역 경관을 아름답게 하고 주민이 함께 누리는 환경 조성에 기여함.'
+  ];
+  if(/수해|집중호우|재난|재해|피해복구|복구활동/.test(text))return [
+    '재난 피해를 입은 주민의 일상 회복을 돕기 위한 복구 봉사에 참여함.',
+    '피해 현장에서 기록된 복구 활동을 수행하며 이웃의 어려움을 함께 나눔.',
+    '이를 통해 피해 주민의 회복을 지원하고 지역공동체가 다시 일어서는 데 기여함.'
+  ];
+  if(/방역|소독|감염병/.test(text))return [
+    '주민의 건강과 안전을 지키기 위한 방역·소독 활동에 참여함.',
+    '공공장소와 다중이용시설 등 기록에 있는 장소를 중심으로 방역 활동을 수행함.',
+    '이를 통해 감염병 예방과 안전한 지역 생활환경 조성에 기여함.'
+  ];
+  if(/축제|문화행사|문화제|예술제|음악회/.test(text)){
+    const role=/안내|질서|방문객|관람객/.test(text)?'방문객 안내와 행사 질서 유지 등 맡은 역할을 수행함.':'행사 운영에 필요한 현장 지원을 맡아 원활한 진행을 도움.';
+    return [
+      '지역 문화행사의 원활한 개최를 돕기 위한 자원봉사활동에 참여함.',
+      role,
+      '이를 통해 방문객의 편의를 돕고 지역문화 활성화와 행사의 성공적인 개최에 기여함.'
+    ];
+  }
+  if(/카네이션|떡국|빵나눔|사랑의 빵|어버이날|어르신/.test(text))return [
+    '이웃에게 감사와 따뜻한 마음을 전하기 위한 나눔 활동에 참여함.',
+    `${title.replace(/[.。]+$/,'')} 활동을 통해 어르신과 이웃을 살피고 정을 나눔.`,
+    '이를 통해 이웃사랑을 실천하고 따뜻한 지역공동체 조성에 기여함.'
+  ];
+  const area=clean(activity.rows.find(row=>clean(row.area))?.area)||'지역사회';
+  return [
+    `${area} 분야의 ${title} 활동에 참여하여 지역사회에 필요한 봉사를 실천함.`,
+    `활동 현장에서 맡은 일을 수행하며 ${area} 분야에 필요한 지원을 보탬.`,
+    `이를 통해 ${contributionFor(activity.rows,area)}에 기여함.`
+  ];
 }
 const normalized = value => clean(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
 const val = id => clean($(id).value);
