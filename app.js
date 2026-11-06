@@ -211,7 +211,8 @@ const headerAliases = {
   date: ['봉사일자','활동일자','실적일자','봉사날짜','활동날짜','봉사일','활동일시','봉사일시','봉사활동일자','봉사시작일','활동일','활동기간'],
   time: ['봉사시간','활동시간','인정시간','실적시간','시간(분)','봉사시간(분)','인증시간','인정봉사시간','총봉사시간','활동시간(분)'],
   desc: ['봉사내용','활동내용','실적내용','봉사활동내용','활동명','프로그램명','내용','봉사활동명','실적명'],
-  status: ['승인상태','승인여부','처리상태','상태','인증상태','실적상태']
+  status: ['승인상태','승인여부','처리상태','상태','인증상태','실적상태'],
+  deleted: ['삭제여부','삭제상태']
 };
 function headerKey(value) { return normalized(value).replace(/봉사실적|자원봉사/g,''); }
 function findHeader(rows) {
@@ -238,6 +239,8 @@ function rowsToRecords(rows, sourceName) {
   let rejected = 0;
   for (const row of rows.slice(rowIndex+1)) {
     if (!Array.isArray(row) || !row.some(value => clean(value))) continue;
+    const deleteFlag=match.deleted>=0?normalized(row[match.deleted]):'';
+    if (/삭제/.test(deleteFlag)||/^(y|yes|true|1)$/i.test(deleteFlag)) continue;
     const desc = clean(row[match.desc]);
     if (!desc || /^(합계|총계|계)$/i.test(desc)) continue;
     const area = match.area >= 0 ? clean(row[match.area]) : '';
@@ -400,6 +403,7 @@ function downloadExcelForm(){
     ['4. 이 파일을 저장한 뒤 웹앱에서 작성한 엑셀 불러오기 · 자동 작성을 누릅니다.'],
     ['업로드하면 인적사항과 승인 실적을 함께 읽어 문서 초안을 자동으로 만듭니다.'],
     ['날짜·시간·활동분야·봉사내용 열이 원본에 있어야 공적기간과 분야를 계산할 수 있습니다.'],
+    ['1365 원본의 활동처명·연계실적 등록일·관할센터·비고 같은 추가 열은 그대로 두셔도 됩니다. 필요한 항목만 읽고, 삭제 표시된 행은 제외합니다.'],
     ['기본정보 시트에서 B열은 직접 쓰는 칸입니다. C열 예시는 참고용이고, D열에는 항목 뜻을 적었습니다.'],
     ['예시 값은 문서에 들어가지 않습니다. 실제 사람의 정보만 B열에 적어 주세요.'],
     ['해당 사항이 없거나 모르는 항목은 억지로 적지 말고 빈칸으로 두세요. 예시를 실제 정보처럼 복사해 넣지 마세요.'],
