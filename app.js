@@ -11,10 +11,19 @@ let personalAPIKey = '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
-const MAX_MERIT_ITEMS = 2;
-const MAX_MERIT_ITEM_CHARS = 105;
+const MAX_MERIT_ITEMS = 3;
+const MAX_MERIT_ITEM_LINES = 3;
+const MAX_MERIT_LINE_CHARS = 55;
 function limitMeritDetail(value) {
-  return String(value??'').replace(/\r/g,'').split('\n').map(line=>Array.from(line.trim()).slice(0,MAX_MERIT_ITEM_CHARS).join('')).filter(Boolean).slice(0,MAX_MERIT_ITEMS).join('\n');
+  const items=[];
+  for(const rawLine of String(value??'').replace(/\r/g,'').split('\n')){
+    const line=rawLine.trim();
+    if(!line){continue;}
+    if(/^[•●▪◦*-]\s*/.test(line))items.push([line]);
+    else if(items.length)items[items.length-1].push(line);
+    else items.push([line]);
+  }
+  return items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n');
 }
 function detailedMeritItems(rows) {
   const seen=new Set(),items=[];
@@ -23,7 +32,7 @@ function detailedMeritItems(rows) {
     const key=normalized(phrase);
     if(!key||seen.has(key))continue;
     seen.add(key);
-    items.push(`• ${Array.from(phrase).slice(0,MAX_MERIT_ITEM_CHARS-2).join('')}`);
+    items.push(`• ${Array.from(phrase).slice(0,MAX_MERIT_LINE_CHARS-2).join('')}`);
     if(items.length===MAX_MERIT_ITEMS)break;
   }
   return items;
@@ -480,7 +489,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 건별 최대 3줄 · 분야별 2건)</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="활동 한 건씩 줄을 바꿔 적으세요. 각 건은 3줄 분량까지 작성됩니다.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (최대 3건 · 건별 3줄 이내)</label><textarea data-group="${index}" data-key="detail" rows="10" placeholder="공적 한 건당 최대 세 줄로 작성해요. 다음 공적은 •로 시작해요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
@@ -588,8 +597,8 @@ function draftText({announceResult=true}={}) {
     if(!rows.length){group.detail='';group.short='';return;}
     const summary=compactMeritSummary(rows,MAX_MERIT_ITEMS).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
     const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
-    // 주요 공적내용은 실제 실적 문구를 활용해 건별 3줄 분량, 분야별 2건까지만 작성한다.
-    group.detail=limitMeritDetail(detailedMeritItems(rows).join('\n'));
+    // 기본 작성은 확인된 실적만 3건까지 표시한다. AI를 쓰면 건별 상세 문장을 덧붙인다.
+    group.detail=limitMeritDetail(detailedMeritItems(rows).join('\n\n'));
     group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
 
   });
@@ -789,6 +798,35 @@ function replaceTemplateText(doc, search, replacement, exactOnly=false) {
     if (index>=0) changeParagraphRange(nodes,index,index+search.length,cleanTemplateValue(replacement));
   }
 }
+function replaceTemplateTextWithBreaks(doc, search, replacement) {
+  const lines=String(replacement??'').replace(/\r/g,'').split('\n');
+  if(lines.length<2){replaceTemplateText(doc,search,lines[0]||'');return;}
+  for(const paragraph of doc.getElementsByTagNameNS(HWP_NS.hp,'p')){
+    const nodes=[];
+    const collect=node=>{for(const child of node.childNodes){if(child.nodeType!==1)continue;if(child.namespaceURI===HWP_NS.hp&&child.localName==='p')continue;if(child.namespaceURI===HWP_NS.hp&&child.localName==='t')nodes.push(child);else collect(child);}};
+    collect(paragraph);
+    const joined=nodes.map(node=>node.textContent||'').join(''),index=joined.indexOf(search);
+    if(index<0)continue;
+    const prefix=joined.slice(0,index),suffix=joined.slice(index+search.length),first=nodes[0];
+    if(!first)return;
+    for(const node of nodes)node.textContent='';
+    first.textContent=prefix+(lines[0]||'');
+    const run=first.parentElement;
+    if(!run)return;
+    const cursor=first.nextSibling;
+    for(let lineIndex=1;lineIndex<lines.length;lineIndex++){
+      const lineBreak=doc.createElementNS(HWP_NS.hp,'hp:lineBreak');
+      run.insertBefore(lineBreak,cursor);
+      const textNode=doc.createElementNS(HWP_NS.hp,'hp:t');
+      textNode.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');
+      textNode.textContent=lines[lineIndex]||'';
+      run.insertBefore(textNode,cursor);
+    }
+    if(suffix){const tail=doc.createElementNS(HWP_NS.hp,'hp:t');tail.textContent=suffix;run.insertBefore(tail,cursor);}
+    return;
+  }
+  throw new Error(`원본 한글 서식에서 입력 위치를 찾지 못했습니다: ${search}`);
+}
 function setTemplateCellText(doc, tableIndex, rowIndex, cellIndex, value) {
   const children=(node,name)=>Array.from(node.children).filter(child=>child.namespaceURI===HWP_NS.hp&&child.localName===name);
   const table=Array.from(doc.getElementsByTagNameNS(HWP_NS.hp,'tbl'))[tableIndex];
@@ -910,7 +948,11 @@ async function createTemplateHwpx(model) {
     values[marker(firstMarker+1)]=limitMeritDetail(group?.detail||'');
     values[marker(firstMarker+2)]=group?.short||'';
   }
-  for(const [token,value] of Object.entries(values))replaceTemplateText(doc,token,cleanTemplateValue(value));
+  for(const [token,value] of Object.entries(values)){
+    const markerId=token.charCodeAt(0)-0xE000;
+    if(markerId>=34&&markerId<=46&&(markerId-34)%3===0)replaceTemplateTextWithBreaks(doc,token,value);
+    else replaceTemplateText(doc,token,cleanTemplateValue(value));
+  }
   zip.file('Contents/section0.xml',new XMLSerializer().serializeToString(doc));
   const preview=zip.file('Preview/PrvText.txt');
   if(preview)zip.file('Preview/PrvText.txt','공적조서 양식');
@@ -947,7 +989,7 @@ function createHwpxXml(model) {
     `주요 학력: ${[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력'}`,`주요 경력: ${[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력'}`,`과거 표창기록: ${[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력'}`,'','위 기록이 틀림없음을 확인합니다.',model.docDate,
     {text:`추천관 ${model.recommender}`,stamp:'recommender'}
   ];
-  const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 학력',[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력','주요 경력',[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력','과거 표창기록',[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,group.detail||''])];
+  const p2=[{text:'주 요 공 적 사 항',heading:true},model.intro||'상기인은 공적사항을 입력해 주세요.','주요 학력',[model.educationDate,model.education].filter(Boolean).join('  ')||'미입력','주요 경력',[model.careerDate,model.career].filter(Boolean).join('  ')||'미입력','과거 표창기록',[model.historyDate,model.history].filter(Boolean).join('  ')||'미입력',...model.groups.flatMap(group=>[`○ ${group.title}`,...String(group.detail||'').split('\n')])];
   const p3=[{text:'공 적 개 요 서',heading:true},`소속: ${model.org}    직급·직책: ${model.rank}`,`성명: ${model.name}    공적기간: ${model.period}`,'공적 개요',...model.groups.flatMap(group=>[`○ ${group.title}`,group.short||''])];
   const p4=[{text:'현 지 조 사 확 인 서',heading:true},'1. 인적사항',`소속: ${model.org}    직위(직급): ${model.rank}`,`성명: ${model.name}    생년월일(성별): ${model.birth} (${model.gender})`,'2. 현지조사 확인내용','품성 (도덕성 흠결 여부 등)',model.character||fieldInvestigationDraft(selected()).character,'지역여론 (공·사생활 등)',model.reputation||fieldInvestigationDraft(selected()).reputation,'공적사항 (공적내용과 일치 여부)',FIXED_MATCHING,'',model.docDate,`현지조사자  소속: ${model.org}  직위: ${model.investigatorRank}`,{text:`성명: ${model.investigator}`,stamp:'investigator'}];
   const sections=[pageSection(p1,0),pageSection(p2,100,true),pageSection(p3,200,true),pageSection(p4,300,true)].join('');
