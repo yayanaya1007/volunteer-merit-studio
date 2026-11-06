@@ -345,8 +345,9 @@ async function parseWorkbook(file) {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
-    const parsed = rowsToRecords(rows,`${file.name} · ${sheetName}`);
     personal={...extractPersonalFields(rows),...personal};
+    if(isInputTemplate&&normalized(sheetName)!=='시간인증실적')continue;
+    const parsed = rowsToRecords(rows,`${file.name} · ${sheetName}`);
     found.push(...parsed.rows); rejected += parsed.rejected; hasDescriptionColumn ||= parsed.hasDescriptionColumn;
   }
   return {rows:found,rejected,hasDescriptionColumn,personal,isInputTemplate};
