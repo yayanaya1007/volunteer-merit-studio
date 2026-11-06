@@ -11,6 +11,23 @@ let personalAPIKey = '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+const MAX_MERIT_ITEMS = 2;
+const MAX_MERIT_ITEM_CHARS = 105;
+function limitMeritDetail(value) {
+  return String(value??'').replace(/\r/g,'').split('\n').map(line=>Array.from(line.trim()).slice(0,MAX_MERIT_ITEM_CHARS).join('')).filter(Boolean).slice(0,MAX_MERIT_ITEMS).join('\n');
+}
+function detailedMeritItems(rows) {
+  const seen=new Set(),items=[];
+  for(const row of rows){
+    const phrase=String(row.desc||'').replace(/^[0-9]{4}[.\/-][0-9]{1,2}[.\/-][0-9]{1,2}\s*/,'').replace(/\([^)]*\)/g,' ').replace(/\[[^\]]*\]/g,' ').replace(/\b\d{1,2}:\d{2}\b/g,' ').replace(/\s+/g,' ').replace(/[.。]+$/,'').trim();
+    const key=normalized(phrase);
+    if(!key||seen.has(key))continue;
+    seen.add(key);
+    items.push(`• ${Array.from(phrase).slice(0,MAX_MERIT_ITEM_CHARS-2).join('')}`);
+    if(items.length===MAX_MERIT_ITEMS)break;
+  }
+  return items;
+}
 const normalized = value => clean(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
 const val = id => clean($(id).value);
 const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
@@ -463,7 +480,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (핵심 활동 2개)</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="실적을 확인한 뒤 문장을 작성하세요.">${esc(group.detail)}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (활동 건별 최대 3줄 · 분야별 2건)</label><textarea data-group="${index}" data-key="detail" rows="4" placeholder="활동 한 건씩 줄을 바꿔 적으세요. 각 건은 3줄 분량까지 작성됩니다.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
@@ -480,7 +497,9 @@ function renderReferences() {
 $('groups').addEventListener('input',event=>{
   const index=Number(event.target.dataset.group),key=event.target.dataset.key;
   if (!Number.isInteger(index)||!groups[index]||!key) return;
-  groups[index][key]=event.target.value;
+  const nextValue=key==='detail'?limitMeritDetail(event.target.value):event.target.value;
+  if(event.target.value!==nextValue){const caret=event.target.selectionStart;event.target.value=nextValue;event.target.setSelectionRange(Math.min(caret,nextValue.length),Math.min(caret,nextValue.length));}
+  groups[index][key]=nextValue;
   if (key==='title') renderRows();
 });
 $('regroup').addEventListener('click',()=>{
@@ -567,10 +586,10 @@ function draftText({announceResult=true}={}) {
   groups.forEach((group,index)=>{
     const rows=included.filter(record=>record.cat===index);
     if(!rows.length){group.detail='';group.short='';return;}
-    const summary=compactMeritSummary(rows,2).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
+    const summary=compactMeritSummary(rows,MAX_MERIT_ITEMS).map(item=>String(item).replace(/\s*활동을 통해.*$/,'').trim()).filter(Boolean);
     const concise=summary.map(item=>item.replace(/[.。]+$/,'').trim()).filter(Boolean);
-    // 분야별 1~2개의 핵심 내용만 짧게 작성하고 같은 기여 문구를 반복하지 않는다.
-    group.detail=concise.length?concise.map(item=>'• '+item).join('\n'):'';
+    // 주요 공적내용은 실제 실적 문구를 활용해 건별 3줄 분량, 분야별 2건까지만 작성한다.
+    group.detail=limitMeritDetail(detailedMeritItems(rows).join('\n'));
     group.short=concise.length?concise.slice(0,2).join(' 및 ')+' 참여':'';
 
   });
@@ -617,7 +636,7 @@ async function generateAIDraft({announceResult=true}={}) {
     if (!response.ok) throw new Error(resultBody.error||'AI 초안을 만들지 못했습니다.');
     const result=resultBody;
     if (!Array.isArray(result.groups)||result.groups.length!==groups.length||typeof result.gist!=='string'||typeof result.intro!=='string'||typeof result.character!=='string'||typeof result.reputation!=='string'||typeof result.matching!=='string') throw new Error('AI 응답 형식을 확인하지 못했습니다.');
-    groups=groups.map((group,index)=>({...group,detail:clean(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
+    groups=groups.map((group,index)=>({...group,detail:limitMeritDetail(result.groups[index]?.detail),short:clean(result.groups[index]?.short)}));
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
     const investigation=fieldInvestigationDraft(selected());
     $('character').value=investigation.character;
@@ -669,7 +688,7 @@ function stampMarkup(kind) {
   return `<span class="seal"><span>(인)</span><img src="${stamp.dataUrl}" alt="도장" style="width:${size}mm;height:${size}mm"></span>`;
 }
 function documentModel() {
-  const active=groups.map((group,index)=>({...group,index,rows:selected().filter(record=>record.cat===index)}));
+  const active=groups.map((group,index)=>({...group,detail:limitMeritDetail(group.detail),index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
     year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
@@ -888,7 +907,7 @@ async function createTemplateHwpx(model) {
     const group=model.groups[index];
     const firstMarker=33+index*3;
     values[marker(firstMarker)]=group?.title||'';
-    values[marker(firstMarker+1)]=group?.detail||'';
+    values[marker(firstMarker+1)]=limitMeritDetail(group?.detail||'');
     values[marker(firstMarker+2)]=group?.short||'';
   }
   for(const [token,value] of Object.entries(values))replaceTemplateText(doc,token,cleanTemplateValue(value));
@@ -1015,7 +1034,7 @@ function loadProjectData(data){
   fieldIds.forEach(id=>{if($(id))$(id).value=id==='matching'?FIXED_MATCHING:(data.fields[id]??'');});
   records=data.records.map(record=>({...record,cat:Math.max(0,Number(record.cat)||0)}));
   if(data.version>=3&&groupsToLoad.length>=1&&groupsToLoad.length<=MAX_GROUPS){
-    groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:group.detail||'',short:group.short||''}));
+    groups=groupsToLoad.map(group=>({key:group.key||'',title:clean(group.title)||'봉사활동',detail:limitMeritDetail(group.detail),short:group.short||''}));
     records.forEach(record=>{record.cat=Math.min(groups.length-1,record.cat);});
   }else{
     autoGroupRecords();if(records.length)draftText({announceResult:false});
