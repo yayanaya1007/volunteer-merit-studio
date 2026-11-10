@@ -648,16 +648,11 @@ $('regroup').addEventListener('click',()=>{
 });
 
 const FIXED_MATCHING = '-공적내용과 일치함';
-function fieldInvestigationDraft(rows) {
-  const groupsWithRows=groups.map((group,index)=>({group,rows:rows.filter(row=>row.cat===index)})).filter(item=>item.rows.length);
-  const topics=groupsWithRows.slice(0,3).map(item=>item.group.title).filter(Boolean);
-  const activities=groupsWithRows.map(item=>compactMeritSummary(item.rows,1)[0]).filter(Boolean).slice(0,3);
-  const topicText=topics.join('·')||'자원봉사';
-  const activityText=activities.join('·')||'지역사회 봉사활동';
-  const outcomes=[...new Set(groupsWithRows.map(item=>contributionFor(item.rows,item.group.title)))].slice(0,2).join(' 및 ')||'지역사회 발전';
+function fieldInvestigationDraft() {
+  // iCloud 공적조서 예시처럼 활동·장소를 나열하지 않고 한 줄 확인 문구로 작성한다.
   return {
-    character:`${topicText} 분야의 ${activityText} 등 봉사활동에 참여하며 맡은 역할을 성실히 수행함.`,
-    reputation:`${activityText} 활동에 참여하여 ${outcomes}에 힘쓰는 등 지역사회 봉사에 기여함.`
+    character:'성실하고 겸손하며 도덕성에 흠결이 없음.',
+    reputation:'이웃과의 관계가 원만하고 지역 내 신망이 높음.'
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
