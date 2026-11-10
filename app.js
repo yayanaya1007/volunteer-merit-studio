@@ -26,21 +26,42 @@ function limitMeritDetail(value) {
   return items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n');
 }
 function synthesizedMerit(rows,title='') {
-  const text=rows.map(row=>`${row.area||''} ${row.desc||''}`).join(' ');
-  const source=`${title} ${text}`;
-  const themes=[];
-  if(/환경|정화|재활용|분리배출|탄소|자원순환|생태|식목|나무심기|꽃심기/.test(source)) themes.push('환경을 보전하고 자원순환을 실천해 쾌적한 생활환경 조성과 환경보호 의식 확산에 힘쓰며');
-  if(/재난|재해|수해|복구|방역|소독|감염병/.test(source)) themes.push('재난 대응과 방역 등 주민 안전을 위한 봉사로 이웃의 회복과 안전한 생활 기반을 뒷받침하며');
-  if(/안전|화재|소방|교통|구조|예방/.test(source)) themes.push('지역 안전을 지키는 봉사로 주민 보호와 안전 의식 확산을 뒷받침하며');
-  if(/문화|축제|행사|공연|예술|관광|음악회/.test(source)) themes.push('지역 문화행사 지원을 통해 주민의 문화 향유와 지역문화 활성화를 돕고');
-  if(/취약|돌봄|어르신|유학생|나눔|급식|반찬|음식|의료|건강|카네이션|빵/.test(source)) themes.push('이웃 돌봄과 나눔을 실천해 주민 간 관심과 연대를 넓히며');
-  if(/생활편의|주거|생활지원|물품지원|편의/.test(source)) themes.push('주민 생활에 필요한 지원을 보태어 일상 편의와 지역 복지 증진을 돕고');
-  if(/교육|학습|멘토|상담/.test(source)) themes.push('배움과 성장을 돕는 봉사로 주민 역량 향상과 상호 협력을 북돋으며');
-  if(/봉사|지원|활동/.test(source)&&!themes.length) themes.push('지역사회에 필요한 봉사에 참여해 이웃에게 필요한 도움을 보태며');
-  if(!themes.length) themes.push('실적에 나타난 봉사활동으로 주민에게 필요한 도움을 보태며');
-  const detail=`- ${themes.join(' ')} 지역공동체의 발전에 기여함.`;
-  const short=detail.slice(2);
-  return {detail,short};
+  const counts=new Map();
+  for(const row of rows){const key=themeKey(row);counts.set(key,(counts.get(key)||0)+1);}
+  const titleKey=(()=>{
+    const value=clean(title);
+    if(/환경|생태|자원순환/.test(value))return 'environment';
+    if(/재난|재해|방역/.test(value))return 'disaster';
+    if(/안전|화재|소방/.test(value))return 'safety';
+    if(/생활편의|돌봄|주거/.test(value))return 'care';
+    if(/급식|식생활|나눔/.test(value))return 'meal';
+    if(/문화|체육|예술|관광|축제/.test(value))return 'culture';
+    if(/교육|학습/.test(value))return 'education';
+    if(/기부|후원|지원/.test(value))return 'donation';
+    if(/농촌|농가|농업/.test(value))return 'rural';
+    if(/보건|의료|건강/.test(value))return 'medical';
+    if(/동물|유기견|유기묘/.test(value))return 'animal';
+    return '';
+  })();
+  const maxCount=Math.max(0,...counts.values());
+  const theme=[...counts].find(([key,count])=>key===titleKey&&count===maxCount)?.[0]
+    ||[...counts].find(([,count])=>count===maxCount)?.[0]
+    ||titleKey||'care';
+  const writing={
+    environment:{detail:'환경을 보전하고 자원순환을 실천하는 봉사활동으로 쾌적한 생활환경을 가꾸며, 주민의 환경보호 인식을 넓혀 지속가능한 지역사회 조성에 기여함.',short:'환경보호와 자원순환 실천을 통한 쾌적한 지역환경 조성에 기여함.'},
+    disaster:{detail:'재난·재해 대응과 회복을 뒷받침하는 봉사활동에 참여해 주민의 안전과 일상 회복을 돕고, 공동체의 위기 대응과 안전한 지역사회 조성에 기여함.',short:'재난 대응과 주민 회복 지원을 통해 안전한 지역사회 조성에 기여함.'},
+    safety:{detail:'주민의 생명과 안전을 지키기 위한 봉사활동에 참여하여 지역의 안전망과 예방 의식을 높이고, 안심하고 생활할 수 있는 공동체 조성에 기여함.',short:'주민 보호와 안전 의식 확산을 통해 안전한 공동체 조성에 기여함.'},
+    care:{detail:'이웃의 필요를 살피는 돌봄과 생활 지원 봉사에 힘써 주민의 일상에 필요한 도움을 보태고, 서로 보살피는 따뜻한 지역공동체와 복지 증진에 기여함.',short:'이웃 돌봄과 생활 지원을 통해 따뜻한 공동체와 복지 증진에 기여함.'},
+    meal:{detail:'이웃의 생활 여건을 살피는 나눔 봉사로 주민 간 관심과 연대를 넓히고, 서로 돕는 나눔문화를 확산하여 따뜻한 지역공동체 조성에 기여함.',short:'이웃 나눔과 돌봄을 실천해 따뜻한 지역공동체 조성에 기여함.'},
+    culture:{detail:'지역의 문화·체육·예술 활동을 돕는 봉사로 주민의 참여와 문화 향유 기회를 넓히고, 지역문화 활성화와 공동체 화합에 기여함.',short:'주민의 문화 참여와 향유를 넓혀 지역문화 활성화에 기여함.'},
+    education:{detail:'배움과 성장을 돕는 봉사활동으로 주민의 역량과 참여를 북돋우고, 서로 배우고 돕는 지역공동체 형성에 기여함.',short:'배움과 성장을 지원해 주민 역량과 공동체 발전에 기여함.'},
+    donation:{detail:'도움이 필요한 이웃을 살피고 나눔을 실천하는 봉사활동으로 주민 간 연대를 넓히며, 나눔문화 확산과 지역사회 복지 증진에 기여함.',short:'나눔과 지원을 통해 이웃 간 연대와 복지 증진에 기여함.'},
+    rural:{detail:'농촌 공동체에 필요한 봉사활동으로 지역의 일손과 생활 기반을 지원하고, 주민과 함께하는 상생과 지역사회 발전에 기여함.',short:'농촌 공동체 지원과 지역사회 상생에 기여함.'},
+    medical:{detail:'주민의 건강 증진과 보건을 돕는 봉사활동에 참여해 건강한 생활 기반을 뒷받침하고, 서로 돌보는 지역공동체 조성에 기여함.',short:'주민 건강을 돕고 건강한 지역공동체 조성에 기여함.'},
+    animal:{detail:'동물 보호와 생명 존중을 위한 봉사활동으로 사람과 동물이 함께 살아가는 환경을 가꾸고, 생명 존중 문화 확산에 기여함.',short:'동물 보호와 생명 존중 문화 확산에 기여함.'}
+  };
+  const result=writing[theme]||writing.care;
+  return {detail:`- ${result.detail}`,short:result.short};
 }
 function detailedMeritItems(rows,title='') {
   return [synthesizedMerit(rows,title).detail];
