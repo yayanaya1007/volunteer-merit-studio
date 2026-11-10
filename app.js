@@ -648,11 +648,36 @@ $('regroup').addEventListener('click',()=>{
 });
 
 const FIXED_MATCHING = '-공적내용과 일치함';
-function fieldInvestigationDraft() {
-  // iCloud 공적조서 예시처럼 활동·장소를 나열하지 않고 한 줄 확인 문구로 작성한다.
+const CHARACTER_WORDING = [
+  '성실하고 겸손하며 도덕성에 흠결이 없음.',
+  '평소 언행이 바르고 성실한 태도로 맡은 바에 임함.',
+  '책임감 있고 바른 품성으로 주변의 신뢰를 받고 있음.',
+  '성실하고 온화한 성품으로 주위에 좋은 본보기가 됨.',
+  '겸손하고 바른 태도로 타인을 배려하며 생활함.',
+  '평소 품행이 단정하고 성실한 자세를 지니고 있음.'
+];
+const REPUTATION_WORDING = [
+  '이웃과의 관계가 원만하고 지역 내 신망이 높음.',
+  '지역 주민과 원만하게 지내며 주위의 평판이 좋음.',
+  '이웃을 배려하는 태도로 지역사회에서 신뢰를 받고 있음.',
+  '지역 내 대인관계가 원만하고 주민들의 평가가 좋음.',
+  '공·사생활이 바르고 지역사회에서 좋은 평판을 얻고 있음.',
+  '주민들과 원만한 관계를 맺고 지역 내 신망을 얻고 있음.'
+];
+function stableWordingIndex(seed, count) {
+  let hash=2166136261;
+  for (const character of String(seed||'')) hash=Math.imul(hash^character.charCodeAt(0),16777619);
+  return (hash>>>0)%count;
+}
+function fieldInvestigationDraft(rows=[]) {
+  // 아이클라우드 공적조서 예시의 간결한 형식에 맞춰 여러 문구 중 하나를 고른다.
+  // 이름이 같은 사람은 다시 작성해도 같은 문구를 유지하고, 다른 사람은 문구를 나눠 쓴다.
+  const seed=[val('name'),val('birth'),val('org')].filter(Boolean).join('|')
+    ||rows.slice(0,5).map(row=>`${row.area||''}:${row.desc||''}`).join('|')
+    ||'자원봉사';
   return {
-    character:'성실하고 겸손하며 도덕성에 흠결이 없음.',
-    reputation:'이웃과의 관계가 원만하고 지역 내 신망이 높음.'
+    character:CHARACTER_WORDING[stableWordingIndex(`${seed}|character`,CHARACTER_WORDING.length)],
+    reputation:REPUTATION_WORDING[stableWordingIndex(`${seed}|reputation`,REPUTATION_WORDING.length)]
   };
 }
 // 공적문장은 봉사활동 원본에 등장하는 내용만 활용하며 임의의 행사·수혜자를 추가하지 않는다.
