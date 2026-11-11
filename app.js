@@ -51,7 +51,7 @@ function synthesizedMerit(rows,title='') {
     environment:{detail:'쾌적한 생활환경을 지키고 지속가능한 지역의 기반을 넓히는 데 기여함. 환경보호와 자원순환의 가치를 널리 나누어 주민의 실천 의식과 공동체 책임을 높이고, 자연과 사람이 조화롭게 살아갈 수 있는 환경을 조성함. 이를 통해 다음 세대까지 이어질 건강하고 지속가능한 지역사회 발전에 기여함.',short:'환경보호와 자원순환 실천을 통한 쾌적한 지역환경 조성에 기여함.'},
     disaster:{detail:'재난·재해에 대한 지역사회의 대응 기반을 튼튼히 하고, 어려움에 놓인 주민의 안전과 일상 회복을 뒷받침하는 공동체 역량을 높임. 주민 간 연대와 상호 지원이 이어지는 환경을 만들어 위기에도 서로 의지할 수 있도록 함. 이를 통해 재난에 강하고 주민이 안심할 수 있는 지역사회 조성에 기여함.',short:'재난 대응과 주민 회복 지원을 통해 안전한 지역사회 조성에 기여함.'},
     safety:{detail:'주민이 안심하고 생활할 수 있도록 지역의 안전망과 예방 의식을 높이고, 서로의 안전을 살피는 책임 있는 공동체 문화를 확산함. 이를 바탕으로 일상 속 위험을 줄이고 주민의 안전과 신뢰를 함께 지킴. 안심하고 살아갈 수 있는 안전한 지역사회 발전에 기여함.',short:'주민 보호와 안전 의식 확산을 통해 안전한 공동체 조성에 기여함.'},
-    care:{detail:'주민이 일상에서 겪는 불편을 줄이고 안정적으로 생활할 수 있는 여건을 넓히며, 이웃 간 관심과 배려가 이어지는 지역공동체의 기반을 강화함. 이를 통해 주민의 삶의 질을 높이고 서로 의지하며 살아가는 따뜻하고 살기 좋은 지역사회 조성에 기여함.',short:'이웃 돌봄과 생활 지원을 통해 따뜻한 공동체와 복지 증진에 기여함.'},
+    care:{detail:'주민이 일상에서 겪는 불편을 줄이고 안정적으로 생활할 수 있는 여건을 넓힘. 이웃 간 관심과 배려가 이어지는 지역공동체의 기반을 강화함. 이를 통해 주민의 삶의 질을 높이고 서로 의지하며 살아가는 따뜻하고 살기 좋은 지역사회 조성에 기여함.',short:'이웃 돌봄과 생활 지원을 통해 따뜻한 공동체와 복지 증진에 기여함.'},
     meal:{detail:'이웃 간 나눔과 배려의 가치를 넓히고, 생활 여건에 관계없이 주민이 존중받으며 살아갈 수 있는 따뜻한 공동체 기반을 강화함. 서로를 살피고 돕는 지역의 연대가 이어지도록 하여 함께 살아가는 힘을 키움. 이를 통해 주민의 삶을 보듬고 지역사회 복지와 공동체 발전에 기여함.',short:'이웃 나눔과 돌봄을 실천해 따뜻한 지역공동체 조성에 기여함.'},
     culture:{detail:'주민 누구나 문화·체육·예술을 누리고 함께 어울릴 수 있는 여건을 넓혀 지역의 문화 향유와 공동체 교류를 활성화함. 이를 통해 주민 간 유대와 지역의 활력을 높이고 다양한 세대가 함께 성장하는 문화공동체 기반을 강화함. 지속적인 문화 발전과 지역사회 화합에 기여함.',short:'주민의 문화 참여와 향유를 넓혀 지역문화 활성화에 기여함.'},
     education:{detail:'주민의 배움과 성장을 뒷받침하는 기회를 넓히고, 세대와 이웃 간 지식과 경험을 나누는 문화를 확산함. 이를 통해 개인의 역량과 자신감을 높이며 누구나 함께 배우고 성장할 수 있는 포용적인 공동체 기반을 마련함. 지속적인 교육 발전과 지역사회 성장에 기여함.',short:'배움과 성장을 지원해 주민 역량과 공동체 발전에 기여함.'},
@@ -620,7 +620,7 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적을 종합한 공적 문단)</label><textarea data-group="${index}" data-key="detail" rows="8" placeholder="개별 활동명이나 장소를 나열하지 않고, 이 분야가 지역사회에 준 영향과 기여를 세 줄 이상 한 문단으로 이어 적어요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적을 종합한 공적 문단)</label><textarea data-group="${index}" data-key="detail" rows="8" placeholder="개별 활동명이나 장소를 나열하지 않고, 이 분야가 지역사회에 준 영향과 기여를 세 문장 이상 한 문단으로 이어 적어요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
