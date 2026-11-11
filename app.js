@@ -13,7 +13,10 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;'
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
 const MAX_MERIT_ITEMS = 1;
 const MAX_MERIT_ITEM_LINES = 1; // 분야별로 활동을 묶은 한 문단
-const MAX_MERIT_LINE_CHARS = 480;
+const MIN_MERIT_CHARS = 135;
+const MAX_MERIT_CHARS = 150;
+const MAX_MERIT_LINE_CHARS = MAX_MERIT_CHARS;
+const meritCharCount = value => Array.from(String(value ?? '')).length;
 function limitMeritDetail(value) {
   const items=[];
   for(const rawLine of String(value??'').replace(/\r/g,'').split('\n')){
@@ -23,7 +26,7 @@ function limitMeritDetail(value) {
     else if(items.length)items[items.length-1].push(line);
     else items.push([line]);
   }
-  return items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n');
+  return Array.from(items.slice(0,MAX_MERIT_ITEMS).map(item=>item.slice(0,MAX_MERIT_ITEM_LINES).map(line=>Array.from(line).slice(0,MAX_MERIT_LINE_CHARS).join('')).join('\n')).join('\n\n')).slice(0,MAX_MERIT_CHARS).join('');
 }
 function synthesizedMerit(rows,title='') {
   const counts=new Map();
@@ -48,17 +51,17 @@ function synthesizedMerit(rows,title='') {
     ||[...counts].find(([,count])=>count===maxCount)?.[0]
     ||titleKey||'care';
   const writing={
-    environment:{detail:'쾌적한 생활환경을 지키고 지속가능한 지역의 기반을 넓히는 데 기여함. 환경보호와 자원순환의 가치를 널리 나누어 주민의 실천 의식과 공동체 책임을 높이고, 자연과 사람이 조화롭게 살아갈 수 있는 환경을 조성함. 이를 통해 다음 세대까지 이어질 건강하고 지속가능한 지역사회 발전에 기여함.',short:'환경보호와 자원순환 실천을 통한 쾌적한 지역환경 조성에 기여함.'},
-    disaster:{detail:'재난·재해에 대한 지역사회의 대응 기반을 튼튼히 하고, 어려움에 놓인 주민의 안전과 일상 회복을 뒷받침하는 공동체 역량을 높임. 주민 간 연대와 상호 지원이 이어지는 환경을 만들어 위기에도 서로 의지할 수 있도록 함. 이를 통해 재난에 강하고 주민이 안심할 수 있는 지역사회 조성에 기여함.',short:'재난 대응과 주민 회복 지원을 통해 안전한 지역사회 조성에 기여함.'},
-    safety:{detail:'주민이 안심하고 생활할 수 있도록 지역의 안전망과 예방 의식을 높이고, 서로의 안전을 살피는 책임 있는 공동체 문화를 확산함. 이를 바탕으로 일상 속 위험을 줄이고 주민의 안전과 신뢰를 함께 지킴. 안심하고 살아갈 수 있는 안전한 지역사회 발전에 기여함.',short:'주민 보호와 안전 의식 확산을 통해 안전한 공동체 조성에 기여함.'},
-    care:{detail:'주민이 일상에서 겪는 불편을 줄이고 안정적으로 생활할 수 있는 여건을 넓힘. 이웃 간 관심과 배려가 이어지는 지역공동체의 기반을 강화함. 이를 통해 주민의 삶의 질을 높이고 서로 의지하며 살아가는 따뜻하고 살기 좋은 지역사회 조성에 기여함.',short:'이웃 돌봄과 생활 지원을 통해 따뜻한 공동체와 복지 증진에 기여함.'},
-    meal:{detail:'이웃 간 나눔과 배려의 가치를 넓히고, 생활 여건에 관계없이 주민이 존중받으며 살아갈 수 있는 따뜻한 공동체 기반을 강화함. 서로를 살피고 돕는 지역의 연대가 이어지도록 하여 함께 살아가는 힘을 키움. 이를 통해 주민의 삶을 보듬고 지역사회 복지와 공동체 발전에 기여함.',short:'이웃 나눔과 돌봄을 실천해 따뜻한 지역공동체 조성에 기여함.'},
-    culture:{detail:'주민 누구나 문화·체육·예술을 누리고 함께 어울릴 수 있는 여건을 넓혀 지역의 문화 향유와 공동체 교류를 활성화함. 이를 통해 주민 간 유대와 지역의 활력을 높이고 다양한 세대가 함께 성장하는 문화공동체 기반을 강화함. 지속적인 문화 발전과 지역사회 화합에 기여함.',short:'주민의 문화 참여와 향유를 넓혀 지역문화 활성화에 기여함.'},
-    education:{detail:'주민의 배움과 성장을 뒷받침하는 기회를 넓히고, 세대와 이웃 간 지식과 경험을 나누는 문화를 확산함. 이를 통해 개인의 역량과 자신감을 높이며 누구나 함께 배우고 성장할 수 있는 포용적인 공동체 기반을 마련함. 지속적인 교육 발전과 지역사회 성장에 기여함.',short:'배움과 성장을 지원해 주민 역량과 공동체 발전에 기여함.'},
-    donation:{detail:'나눔과 상호 돌봄의 가치를 넓혀 도움이 필요한 이웃도 지역 안에서 존중받고 함께 살아갈 수 있는 기반을 강화함. 주민 간 신뢰와 연대가 이어지는 문화를 키워 공동체의 포용성과 회복력을 높임. 따뜻하고 서로를 보듬는 지역사회와 복지 발전에 기여함.',short:'나눔과 지원을 통해 이웃 간 연대와 복지 증진에 기여함.'},
-    rural:{detail:'농촌 지역의 생활 기반과 공동체 활력을 높이고 주민이 안정적으로 삶을 이어갈 수 있는 여건을 강화함. 지역 구성원 간 상생과 협력을 넓혀 지속가능한 농촌 공동체의 토대를 마련함. 이를 통해 지역 간 균형 있는 발전과 살기 좋은 농촌 지역사회 조성에 기여함.',short:'농촌 공동체 지원과 지역사회 상생에 기여함.'},
-    medical:{detail:'주민의 건강한 생활을 뒷받침하고 건강과 보건의 중요성을 널리 알려 모두가 안전하고 안정적인 생활을 이어갈 수 있는 기반을 강화함. 주민 서로가 건강을 살피는 배려와 책임의 문화를 확산함. 이를 통해 삶의 질을 높이고 건강한 지역사회 발전에 기여함.',short:'주민 건강을 돕고 건강한 지역공동체 조성에 기여함.'},
-    animal:{detail:'생명 존중과 동물 보호의 가치를 널리 알리고 사람과 동물이 조화롭게 살아갈 수 있는 지역사회의 인식 기반을 넓힘. 생명을 소중히 여기는 문화와 책임 있는 공동체 의식을 높임. 이를 통해 지속가능하고 따뜻한 공존 환경 조성에 기여함.',short:'동물 보호와 생명 존중 문화 확산에 기여함.'}
+    environment:{detail:'환경보호와 자원순환의 가치를 넓혀 쾌적하고 지속가능한 생활환경 조성에 힘씀. 주민의 환경 의식과 공동체 책임을 높이고 자연과 사람이 조화롭게 살아가는 지역 기반을 강화함. 그 결과 주민 화합을 높이고 건강하고 지속가능한 지역사회 발전에 기여함.',short:'환경보호와 자원순환 실천을 통한 쾌적한 지역환경 조성에 기여함.'},
+    disaster:{detail:'재난과 위기에 대응하는 지역사회의 역량을 높이고 어려움에 놓인 주민의 안전과 일상 회복을 뒷받침함. 이웃 간 연대와 상호 지원이 이어지는 기반을 강화하여 위기 속에서도 함께 극복할 힘을 키움. 이를 통해 안전하고 회복력 있는 지역사회 조성과 발전에 기여함.',short:'재난 대응과 주민 회복 지원을 통해 안전한 지역사회 조성에 기여함.'},
+    safety:{detail:'주민이 안심하고 생활할 수 있도록 안전 의식과 서로를 살피는 공동체 문화를 확산함. 일상 속 위험을 줄이고 주민의 생명과 재산을 보호하는 지역 안전망을 강화하여 모두가 신뢰할 수 있는 생활 여건을 마련함. 이를 통해 주민 화합과 안전한 지역사회 발전에 기여함.',short:'주민 보호와 안전 의식 확산을 통해 안전한 공동체 조성에 기여함.'},
+    care:{detail:'주민이 일상에서 겪는 불편을 줄이고 안정적으로 생활할 수 있는 여건을 더욱 넓힘. 이웃 간 관심과 배려가 이어지는 지역공동체의 기반을 강화함. 이를 통해 주민의 삶의 질을 높이고 서로 의지하며 살아가는 따뜻하고 살기 좋은 지역사회 조성에 기여함.',short:'이웃 돌봄과 생활 지원을 통해 따뜻한 공동체와 복지 증진에 기여함.'},
+    meal:{detail:'이웃 간 나눔과 배려의 가치를 넓히고 주민이 존중받으며 살아가는 따뜻한 공동체 기반을 강화함. 서로를 살피고 돕는 연대가 이어지도록 하여 함께 살아가는 힘과 지역의 포용성을 높임. 이를 통해 주민의 삶을 보듬고 지역 복지와 공동체 연대를 넓혀 지역사회 발전에 기여함.',short:'이웃 나눔과 돌봄을 실천해 따뜻한 지역공동체 조성에 기여함.'},
+    culture:{detail:'주민 누구나 문화와 예술을 누리고 함께 어울릴 수 있는 여건을 넓혀 지역의 문화 향유와 공동체 교류를 활성화함. 세대 간 유대와 지역의 활력을 높여 지속적인 문화공동체 기반을 강화함. 이를 통해 주민 삶의 질을 높이고 지역사회 화합과 지속적 발전에 기여함.',short:'주민의 문화 참여와 향유를 넓혀 지역문화 활성화에 기여함.'},
+    education:{detail:'주민의 배움과 성장을 뒷받침하는 기회를 넓히고 지식과 경험을 나누는 문화를 확산함. 개인의 역량과 자신감을 높이며 누구나 함께 배우고 성장할 수 있는 포용적인 공동체 기반을 강화함. 이를 통해 주민 역량을 높이고 포용적인 지역사회 성장에 지속적으로 기여함.',short:'배움과 성장을 지원해 주민 역량과 공동체 발전에 기여함.'},
+    donation:{detail:'나눔과 상호 돌봄의 가치를 넓혀 누구나 존중받으며 함께 살아갈 수 있는 공동체 기반을 강화함. 주민 간 신뢰와 연대가 이어지도록 하여 지역사회의 포용성과 회복력을 높임. 이를 통해 지역 복지와 공동체 연대를 넓히고 따뜻한 지역사회 발전에 기여함.',short:'나눔과 지원을 통해 이웃 간 연대와 복지 증진에 기여함.'},
+    rural:{detail:'농촌 지역의 생활 기반과 공동체 활력을 높이고 주민이 안정적으로 삶을 이어갈 여건을 강화함. 지역 구성원 간 상생과 협력을 지속적으로 넓혀 지속가능한 농촌 공동체의 토대를 함께 마련함. 이를 통해 균형 있는 지역 발전과 주민 삶의 질 향상에 기여함.',short:'농촌 공동체 지원과 지역사회 상생에 기여함.'},
+    medical:{detail:'주민의 건강한 생활을 뒷받침하고 건강과 보건의 중요성을 널리 알려 안정적인 생활 기반을 강화함. 서로의 건강을 살피는 배려와 책임의 문화를 확산하고 모두가 안심할 생활 여건을 마련함. 이를 통해 주민의 삶의 질과 건강한 지역사회 발전에 기여함.',short:'주민 건강을 돕고 건강한 지역공동체 조성에 기여함.'},
+    animal:{detail:'생명 존중과 동물 보호의 가치를 널리 알려 사람과 동물이 조화롭게 살아가는 지역사회의 인식 기반을 넓힘. 생명을 소중히 여기는 문화와 책임 있는 공동체 의식을 높여 지속가능한 공존 여건을 마련함. 이를 통해 사람과 동물이 공존하는 지속가능한 지역사회 조성에 기여함.',short:'동물 보호와 생명 존중 문화 확산에 기여함.'}
   };
   const result=writing[theme]||writing.care;
   return {detail:result.detail,short:result.short};
@@ -166,6 +169,9 @@ function hoursValue(value) {
 }
 
 // 주제는 엑셀의 활동분야와 봉사내용에서 도출한다. 재난·안전·환경·돌봄 등은 고정된 목록으로 제한하지 않는다.
+function isVolunteerBasicTraining(record) {
+  return /자원봉사(?:자)?\s*기본\s*교육/.test(`${clean(record?.area)} ${clean(record?.desc)}`);
+}
 const themeCues = [
   {key:'environment',words:['환경','정화','청소','쓰레기','분리배출','재활용','플로깅','하천','산림','생태','자원순환','em흙공']},
   {key:'disaster',words:['재난','재해','수해','복구','침수','폭우','산불','제설','방역','소독','감염병']},
@@ -173,7 +179,7 @@ const themeCues = [
   {key:'care',words:['돌봄','어르신','노인','장애','취약','아동','청소년','독거','요양','생활편의','주거환경']},
   {key:'meal',words:['급식','배식','반찬','도시락','식사','떡국','빵나눔','김장','김밥','음식','떡','빵','나눔']},
   {key:'culture',words:['문화','체육','예술','관광','축제','공연','연주','합창','음악회','전시','무대','행사','안내','운영','홍보','대회','가족봉사단','유학생','체험','통역','공예']},
-  {key:'education',words:['교육','학습','멘토','지도','강의','교실','독서','도서관','기본교육']},
+  {key:'education',words:['교육','학습','멘토','지도','강의','교실','독서','도서관']},
   {key:'donation',words:['기부','후원','물품','전달','카네이션','기증','성금']},
   {key:'rural',words:['농촌','농가','일손','수확','모내기','농작업']},
   {key:'medical',words:['헌혈','보건','의료','건강','병원','검진']},
@@ -263,6 +269,7 @@ function rowsToRecords(rows, sourceName) {
   const {rowIndex,match} = header;
   const imported = [];
   let rejected = 0;
+  let ignoredTraining = 0;
   for (const row of rows.slice(rowIndex+1)) {
     if (!Array.isArray(row) || !row.some(value => clean(value))) continue;
     const deleteFlag=match.deleted>=0?normalized(row[match.deleted]):'';
@@ -270,6 +277,7 @@ function rowsToRecords(rows, sourceName) {
     const desc = clean(row[match.desc]);
     if (!desc || /^(합계|총계|계)$/i.test(desc)) continue;
     const area = match.area >= 0 ? clean(row[match.area]) : '';
+    if (isVolunteerBasicTraining({area,desc})) { ignoredTraining++; continue; }
     const date = match.date >= 0 ? normalizeDate(row[match.date]) : '';
     const rawTime=match.time >= 0 ? row[match.time] : '';
     const timeHeader=match.time >= 0 ? clean(rows[rowIndex]?.[match.time]) : '';
@@ -282,7 +290,7 @@ function rowsToRecords(rows, sourceName) {
     record.cat = classify(record);
     imported.push(record);
   }
-  return {rows:imported,rejected,hasDescriptionColumn:true};
+  return {rows:imported,rejected,ignoredTraining,hasDescriptionColumn:true};
 }
 
 function parseCsv(text) {
@@ -496,7 +504,7 @@ async function importSingleWorkbook() {
   announce('원본 엑셀에서 날짜, 시간, 봉사내용과 승인 상태를 분석하고 있습니다…');
   try {
     const parsed=await parseWorkbook(timeAuthFile);
-    if (!parsed.rows.length) throw new Error('활동분야·봉사내용이 있는 표를 찾지 못했습니다. 1365 원본 시간인증 엑셀을 확인해 주세요.');
+    if (!parsed.rows.length) throw new Error(parsed.ignoredTraining?`자원봉사 기본교육 ${parsed.ignoredTraining}건은 수강 실적이므로 공적내용 작성에서 제외했어요. 다른 봉사실적을 확인해 주세요.`:'활동분야·봉사내용이 있는 표를 찾지 못했습니다. 1365 원본 시간인증 엑셀을 확인해 주세요.');
     if (!parsed.rows.some(row=>row.date && row.hours>0)) throw new Error('봉사 날짜와 시간 정보를 찾지 못했습니다. 날짜·시간이 포함된 시간인증 원본 파일을 선택해 주세요.');
     const valid=parsed.rows.filter(row=>row.approved && row.date && row.hours>0);
     const excluded=parsed.rows.length-valid.length;
@@ -512,8 +520,8 @@ async function importSingleWorkbook() {
     const filledPersonal=applyPersonalFields(personal,{overwrite:Boolean(parsed.isInputTemplate)});
     records=valid; // 같은 날짜와 내용의 기록도 실제 실적일 수 있으므로 임의로 중복 제거하지 않는다.
     autoGroupRecords();
-    lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded};
-    $('importSummary').textContent=`원본 ${parsed.rows.length}건 · 분석 대상 ${records.length}건 · 제외 ${excluded}건 · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
+    lastImport={files:1,imported:records.length,duplicates:0,rejected:parsed.rejected+excluded+(parsed.ignoredTraining||0)};
+    $('importSummary').textContent=`원본 ${parsed.rows.length+(parsed.ignoredTraining||0)}건 · 분석 대상 ${records.length}건 · 제외 ${excluded+(parsed.ignoredTraining||0)}건${parsed.ignoredTraining?` (기본교육 ${parsed.ignoredTraining}건 포함)`:''} · 자동 분류 ${groups.length}개 분야 · 인적사항 자동 입력 ${filledPersonal}개`;
     renderRows();renderReferences();
     draftText({announceResult:false});
     const aiIsReady=isLocalAI||($('aiMode').value==='personal'?Boolean(personalAPIKey):Boolean(sessionStorage.getItem('merit-ai-access-code')));
@@ -559,7 +567,7 @@ $('applyWorkbook').addEventListener('click',async()=>{
 });
 
 
-function selected() { return records.filter(record => record.included); }
+function selected() { return records.filter(record => record.included&&!isVolunteerBasicTraining(record)); }
 function periodRange() {
   const dates = selected().map(record => record.date).filter(Boolean).sort();
   return {start:dates[0]||'',end:dates.at(-1)||''};
@@ -575,7 +583,7 @@ function periodText() {
 }
 function renderRows() {
   const visible=records.map((record,index)=>`<tr>
-    <td><input type="checkbox" data-index="${index}" data-key="included" ${record.included?'checked':''} aria-label="${index+1}번 실적 포함"></td>
+    <td><input type="checkbox" data-index="${index}" data-key="included" ${record.included&&!isVolunteerBasicTraining(record)?'checked':''} ${isVolunteerBasicTraining(record)?'disabled title="자원봉사 기본교육 수강 실적은 공적내용에서 제외됩니다."':''} aria-label="${index+1}번 실적 포함"></td>
     <td>${esc(record.date||'날짜 없음')}</td><td>${esc(record.area||'미분류')}</td>
     <td><input type="text" data-index="${index}" data-key="desc" value="${esc(record.desc)}" aria-label="봉사내용 수정"></td>
     <td><input type="number" min="0" step="0.25" data-index="${index}" data-key="hours" value="${record.hours||''}" aria-label="봉사시간 수정"></td>
@@ -594,7 +602,7 @@ $('rows').addEventListener('change',event=>{
   if (key==='included') records[index].included=event.target.checked;
   else if (key==='cat') records[index].cat=Number(event.target.value);
   else if (key==='hours') records[index].hours=hoursValue(event.target.value);
-  else if (key==='desc') { records[index].desc=clean(event.target.value); records[index].cat=classify(records[index]); }
+  else if (key==='desc') { records[index].desc=clean(event.target.value); records[index].cat=classify(records[index]); if(isVolunteerBasicTraining(records[index]))records[index].included=false; }
   renderRows(); renderReferences(); draftText({announceResult:false});
 });
 $('rows').addEventListener('click',event=>{
@@ -620,11 +628,23 @@ $('clearRows').addEventListener('click',()=>{
 function renderGroups() {
   $('groups').innerHTML=groups.length?groups.map((group,index)=>`<article class="group">
     <div class="group-head"><span class="group-index">${index+1}</span><input data-group="${index}" data-key="title" value="${esc(group.title)}" aria-label="${index+1}분야 제목"></div>
-    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적을 종합한 공적 문단)</label><textarea data-group="${index}" data-key="detail" rows="8" placeholder="개별 활동명이나 장소를 나열하지 않고, 이 분야가 지역사회에 준 영향과 기여를 세 문장 이상 한 문단으로 이어 적어요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
+    <div class="field"><label>1. 공적조서 — 주요 공적내용 (분야별 실적을 종합한 공적 문단) <span class="counter" data-merit-counter="${index}" aria-live="polite"></span></label><textarea data-group="${index}" data-key="detail" maxlength="150" rows="8" placeholder="공백과 문장부호 포함 135~150자로, 분야의 사회적 영향과 기여를 한 문단으로 작성해요. 활동명과 장소는 나열하지 않아요.">${esc(limitMeritDetail(group.detail))}</textarea></div>
     <div class="field"><label>2. 공적개요서 — 분야별 최종 한 줄 요약</label><textarea data-group="${index}" data-key="short" rows="2" placeholder="이 분야의 핵심 실적을 짧게 요약">${esc(group.short)}</textarea></div>
     <div class="reference" id="reference${index}"></div>
   </article>`).join(''):'<p class="hint">원본 엑셀을 올리면 실제 봉사활동을 분석해 분야 제목과 내용을 자동으로 작성합니다.</p>';
   renderReferences();
+  updateMeritCounters();
+}
+function updateMeritCounters() {
+  document.querySelectorAll('[data-merit-counter]').forEach(counter=>{
+    const index=Number(counter.dataset.meritCounter);
+    const input=$(`groups`).querySelector(`[data-group="${index}"][data-key="detail"]`);
+    if(!input)return;
+    const count=meritCharCount(input.value);
+    counter.textContent=`${count} / ${MAX_MERIT_CHARS}자 · ${count<MIN_MERIT_CHARS?'최소 135자 필요':'기준 충족'}`;
+    counter.classList.toggle('under',count<MIN_MERIT_CHARS);
+    counter.classList.toggle('over',count>MAX_MERIT_CHARS);
+  });
 }
 function renderReferences() {
   groups.forEach((group,index)=>{
@@ -640,6 +660,7 @@ $('groups').addEventListener('input',event=>{
   const nextValue=key==='detail'?limitMeritDetail(event.target.value):event.target.value;
   if(event.target.value!==nextValue){const caret=event.target.selectionStart;event.target.value=nextValue;event.target.setSelectionRange(Math.min(caret,nextValue.length),Math.min(caret,nextValue.length));}
   groups[index][key]=nextValue;
+  if(key==='detail')updateMeritCounters();
   if (key==='title') renderRows();
 });
 $('regroup').addEventListener('click',()=>{
@@ -922,6 +943,29 @@ function withStamp(text, kind, id) {
   return hwpxParagraph(marker,{id});
 }
 function cleanTemplateValue(value) { return String(value??'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim(); }
+function regularCharacterStyle(headerDoc,styleId) {
+  const styles=Array.from(headerDoc.getElementsByTagNameNS(HWP_NS.hh,'charPr'));
+  const current=styles.find(style=>style.getAttribute('id')===String(styleId));
+  if(!current)return String(styleId);
+  const isBold=Array.from(current.children).some(child=>child.namespaceURI===HWP_NS.hh&&child.localName==='bold');
+  if(!isBold)return String(styleId);
+  const signature=style=>{
+    const copy=style.cloneNode(true);copy.removeAttribute('id');
+    for(const child of Array.from(copy.children))if(child.namespaceURI===HWP_NS.hh&&child.localName==='bold')copy.removeChild(child);
+    return new XMLSerializer().serializeToString(copy);
+  };
+  const wanted=signature(current);
+  return String(styles.find(style=>!Array.from(style.children).some(child=>child.namespaceURI===HWP_NS.hh&&child.localName==='bold')&&signature(style)===wanted)?.getAttribute('id')??'12');
+}
+function makeMarkerTextRegular(doc,headerDoc,marker) {
+  for(const textNode of Array.from(doc.getElementsByTagNameNS(HWP_NS.hp,'t'))){
+    if(!(textNode.textContent||'').includes(marker))continue;
+    let run=textNode.parentNode;
+    while(run&&!(run.namespaceURI===HWP_NS.hp&&run.localName==='run'))run=run.parentNode;
+    if(run?.hasAttribute('charPrIDRef'))run.setAttribute('charPrIDRef',regularCharacterStyle(headerDoc,run.getAttribute('charPrIDRef')));
+    return;
+  }
+}
 function changeParagraphRange(nodes, start, end, replacement) {
   let offset=0, first=null, last=null, firstOffset=0, lastOffset=0;
   for (const node of nodes) {
@@ -1031,6 +1075,10 @@ async function createTemplateHwpx(model) {
   const zip=await JSZip.loadAsync(await response.arrayBuffer());
   const entry=zip.file('Contents/section0.xml');
   if(!entry)throw new Error('원본 서식에서 문서 내용을 찾지 못했습니다.');
+  const headerEntry=zip.file('Contents/header.xml');
+  if(!headerEntry)throw new Error('원본 서식에서 글자 모양 정보를 찾지 못했습니다.');
+  const headerDoc=new DOMParser().parseFromString(await headerEntry.async('string'),'application/xml');
+  if(headerDoc.querySelector('parsererror'))throw new Error('원본 서식의 글자 모양 정보를 읽지 못했습니다.');
   const xml=await entry.async('string');
   const doc=new DOMParser().parseFromString(xml,'application/xml');
   if(doc.querySelector('parsererror'))throw new Error('원본 한글 서식을 읽지 못했습니다.');
@@ -1108,7 +1156,7 @@ async function createTemplateHwpx(model) {
   }
   for(const [token,value] of Object.entries(values)){
     const markerId=token.charCodeAt(0)-0xE000;
-    if(markerId>=34&&markerId<=46&&(markerId-34)%3===0)replaceTemplateTextWithBreaks(doc,token,value);
+    if(markerId>=34&&markerId<=46&&(markerId-34)%3===0){makeMarkerTextRegular(doc,headerDoc,token);replaceTemplateTextWithBreaks(doc,token,value);}
     else replaceTemplateText(doc,token,cleanTemplateValue(value));
   }
   zip.file('Contents/section0.xml',new XMLSerializer().serializeToString(doc));
@@ -1193,6 +1241,12 @@ async function exportHwpx() {
   const button=$('downloadHwpx');
   if (!selected().some(record=>clean(record.desc))) { announceExport('한글 문서를 만들기 전에 봉사내용이 있는 실적을 한 건 이상 추가해 주세요.','error'); return; }
   if (!val('name')) { announceExport('추천 대상자 성명을 입력해 주세요.','error'); $('name').focus(); return; }
+  const shortFields=groups.map((group,index)=>({group,index,count:meritCharCount(limitMeritDetail(group.detail))})).filter(({index,count})=>selected().some(record=>record.cat===index)&&count<MIN_MERIT_CHARS);
+  if(shortFields.length){
+    const first=shortFields[0],field=$(`groups`).querySelector(`[data-group="${first.index}"][data-key="detail"]`);
+    announceExport(`주요 공적내용은 공백과 문장부호를 포함해 분야별로 135자 이상 150자 이하여야 해요. ${first.group.title} 내용이 ${first.count}자입니다.`,'error');
+    field?.focus();return;
+  }
   button.disabled=true; button.textContent='한글 문서 만드는 중…';
   try {
     const model=documentModel();
