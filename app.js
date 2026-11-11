@@ -11,6 +11,7 @@ let personalAPIKey = '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const clean = value => String(value ?? '').replace(/\u00a0/g,' ').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+const normalizeMeritIntro = value => clean(value).replace(/기여한\s*사람임[.!]?$/,'기여함.');
 const MAX_MERIT_ITEMS = 1;
 const MAX_MERIT_ITEM_LINES = 1; // 분야별로 활동을 묶은 한 문단
 const MIN_MERIT_CHARS = 135;
@@ -784,7 +785,7 @@ function draftText({announceResult=true}={}) {
   const duration=periodText();
   const period=duration==='실적 날짜 확인 필요'?'확인된 공적기간 동안':`총 ${duration} 동안`;
   const totalHours=included.reduce((sum,record)=>sum+Number(record.hours||0),0);
-  $('intro').value=`상기인은 ${period} ${active.slice(0,3).join('·')} 등 자원봉사활동에 성실히 참여하여 지역사회 발전에 기여한 사람임.`;
+  $('intro').value=`상기인은 ${period} ${active.slice(0,3).join('·')} 등 자원봉사활동에 성실히 참여하여 지역사회 발전에 기여함.`;
   const investigation=fieldInvestigationDraft(included);
   $('character').value=investigation.character;
   $('reputation').value=investigation.reputation;
@@ -827,7 +828,7 @@ async function generateAIDraft({announceResult=true}={}) {
       const synthesized=synthesizedMerit(rows,group.title);
       return {...group,title:clean(result.groups[index]?.title)||group.title,detail:limitMeritDetail(synthesized.detail),short:synthesized.short};
     });
-    $('gist').value=clean(result.gist).slice(0,50); $('intro').value=clean(result.intro);
+    $('gist').value=clean(result.gist).slice(0,50); $('intro').value=normalizeMeritIntro(result.intro);
     const investigation=fieldInvestigationDraft(selected());
     $('character').value=investigation.character;
     $('reputation').value=investigation.reputation;
@@ -850,6 +851,7 @@ $('draft').addEventListener('click',async()=>{
   announce(aiUsed?'AI가 근거 실적만 바탕으로 문장을 작성했습니다. 사실과 다른 내용이 없는지 원자료와 대조해 주세요.':'AI 서버를 사용할 수 없습니다. 엑셀 읽기와 기본 초안은 계속 AI 없이 사용할 수 있습니다.','error');
 });
 $('gist').addEventListener('input',updateCharacterCount);
+$('intro').addEventListener('blur',()=>{$('intro').value=normalizeMeritIntro($('intro').value);});
 function updateCharacterCount() {
   const count=val('gist').length,element=$('characters');
   element.textContent=`${count} / 50자`; element.classList.toggle('over',count>50);
@@ -881,7 +883,7 @@ function documentModel() {
   const active=groups.map((group,index)=>({...group,detail:limitMeritDetail(group.detail),index,rows:selected().filter(record=>record.cat===index)}));
   const date=val('docDate')||todayLocal();
   return {
-    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorPosition:val('investigatorPosition'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:val('intro'),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
+    year:val('year'),event:val('event'),name:val('name'),hanja:val('hanja'),birth:val('birth'),gender:val('gender'),serviceNo:val('serviceNo'),nationality:val('nationality'),org:val('org'),job:val('job'),rank:val('rank'),position:val('position'),meritField:val('meritField'),address:val('address'),phone:val('phone'),award:val('award'),order:val('order'),investigator:val('investigator'),investigatorOrg:val('investigatorOrg'),investigatorPosition:val('investigatorPosition'),investigatorRank:val('investigatorRank'),recommender:val('recommender'),docDate:date,education:val('education'),educationDate:val('educationDate'),career:val('career'),careerDate:val('careerDate'),history:val('history'),historyDate:val('historyDate'),gist:val('gist'),intro:normalizeMeritIntro(val('intro')),character:val('character'),reputation:val('reputation'),matching:FIXED_MATCHING,period:periodText(),groups:active
   };
 }
 function previewLine(label,value){
