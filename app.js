@@ -816,7 +816,8 @@ async function generateAIDraft({announceResult=true}={}) {
     groups=groups.map((group,index)=>{
       const rows=narrativeRecords.filter(record=>record.cat===index);
       const synthesized=synthesizedMerit(rows,group.title);
-      return {...group,title:group.title||clean(result.groups[index]?.title),detail:limitMeritDetail(synthesized.detail),short:synthesized.short};
+      const aiGroup=result.groups[index]||{};
+      return {...group,detail:limitMeritDetail(aiGroup.detail||synthesized.detail),short:clean(aiGroup.short)||synthesized.short};
     });
     $('gist').value=clean(result.gist).slice(0,50); $('intro').value=normalizeMeritIntro(result.intro);
     const investigation=fieldInvestigationDraft(selected());
